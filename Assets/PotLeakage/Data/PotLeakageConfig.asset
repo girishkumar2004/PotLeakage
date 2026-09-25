@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 546a79f573e4cec4080879712e8f78d9, type: 3}
+  m_Name: PotLeakageConfig
+  m_EditorClassIdentifier: PotLeakage.Configuration::PotLeakageConfig
+  normalProductionPotVoltage: 4
+  normalProductionCBTTemperature: 100
+  leakageMonitoringVoltageMaximum: 4.5
+  leakageStopVoltage: 1.2
+  potVoltageObservationValue: 4.2
+  currentPotVoltage: 4.2
+  maximumDuctEndVoltage: 4.5

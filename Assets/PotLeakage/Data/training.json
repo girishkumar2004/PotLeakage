@@ -1,0 +1,225 @@
+{
+  "entries": [
+    {
+      "key": "TASK_01",
+      "display": {
+        "en": "Welcome to the Vedanta Aluminium Pot Leakage Training Visualization.\n\nThis training program demonstrates normal operating conditions, leakage identification, and emergency response procedures for reduction pots.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Welcome to the Vedanta Aluminium Pot Leakage Training Visualization. This training program demonstrates normal operating conditions, leakage identification, and emergency response procedures for reduction pots.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_02",
+      "display": {
+        "en": "This section introduces the normal operating condition of the pot before discussing abnormal conditions such as pot leakage.\n\nDuring normal operation, key electrical and thermal parameters are monitored to ensure process stability.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "This section introduces the normal operating condition of the pot before discussing abnormal conditions such as pot leakage. During normal operation, key electrical and thermal parameters are monitored to ensure process stability.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_03",
+      "display": {
+        "en": "Normal Production Pot Voltage: 4.0 V.\n\nStable operating voltage is an important indicator of normal pot operation.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Normal Production Pot Voltage: 4.0 V. Stable operating voltage is an important indicator of normal pot operation.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_04",
+      "display": {
+        "en": "Collector bar temperature is monitored during operation.\n\nNormal CBT: 100 °C.\n\nWhen leakage is observed, immediately inform the Shift Superintendent and Technical In-charge.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Collector bar temperature is monitored during operation. Normal CBT: 100 degrees Celsius. When leakage is observed, immediately inform the Shift Superintendent and Technical In-charge.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_05",
+      "display": {
+        "en": "Immediately inform the Shift Superintendent and Technical In-charge.\n\nCommunication is vital during an emergency. Ensure all personnel are alerted and ready to act according to protocol.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Immediately inform the Shift Superintendent and Technical In-charge. Communication is vital during an emergency. Ensure all personnel are alerted and ready to act according to protocol.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_06",
+      "display": {
+        "en": "Technical In-charge continuously monitors the duct-end pot voltage and gives 2–3 pulse anode up if required to control the pot voltage.\n\nEnsure pot voltage remains <= 4.5 V.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Technical In-charge continuously monitors the duct-end pot voltage and gives 2 to 3 pulse anode up if required to control the pot voltage. Ensure pot voltage remains less than or equal to 4.5 V.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_07",
+      "display": {
+        "en": "Reduce amperage to 300 kA initially.\n\nFor low leakage intensity, use side breaking / fused alumina pushing and ensure fused alumina reaches the bottom.\n\nFor high leakage intensity, lower the anode to the bottom.\n\nIf leakage continues, proceed with the documented cover-bath, crust-breaking and pot cut-out procedure.\n\nIf the leakage is not arrested, stop the pot according to the approved procedure.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Reduce amperage to 300 kA initially. For low leakage intensity, use side breaking and fused alumina pushing, ensuring fused alumina reaches the bottom. For high leakage intensity, lower the anode to the bottom. If leakage continues, proceed with the documented cover-bath, crust-breaking and pot cut-out procedure.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_08",
+      "display": {
+        "en": "Team goes to the lower level to prevent metal pool formation.\n\nTake at least 4 channel-making tools.\n\nRemove the -3 m mesh to provide access.\n\nArrange the bath/alumina tanker near the tap-out.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Team goes to the lower level to prevent metal pool formation. Take at least 4 channel-making tools. Remove the minus 3 meter mesh to provide access. Arrange the bath alumina tanker near the tap-out.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TOOL_BOARD_INTRO",
+      "display": {
+        "en": "The channel-making tools are reviewed before proceeding with the leakage response. The available tools shown here are the Crowbar, L_TOOL and SHOVEL.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "The channel-making tools are reviewed before proceeding with the leakage response. The available tools shown here are the Crowbar, L_TOOL and SHOVEL.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TOOL_BOARD_CROWBAR",
+      "display": {
+        "en": "CROWBAR\n\nThe crowbar is used to break and open compacted material around the affected area. This helps establish a passage for the leakage response.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "CROWBAR. The crowbar is used to break and open compacted material around the affected area. This helps establish a passage for the leakage response.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TOOL_BOARD_L_TOOL",
+      "display": {
+        "en": "L-TOOL\n\nThe L_TOOL is included in this training visualization as a channel-making tool for working around the affected area.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "L-TOOL. The L_TOOL is included in this training visualization as a channel-making tool for working around the affected area.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TOOL_BOARD_SHOVEL",
+      "display": {
+        "en": "SHOVEL\n\nThe shovel is included in this training visualization to assist with handling loose material around the affected area.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "SHOVEL. The shovel is included in this training visualization to assist with handling loose material around the affected area.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "LOW_LEAKAGE_STEP_1",
+      "display": {
+        "en": "COVER BATH CONTAINER\n\nThis container holds fused alumina used during the low-intensity collector-bar leakage response. Fused alumina is pushed into the broken area so that it reaches the bottom and helps control the leakage path.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "COVER BATH CONTAINER. This container holds fused alumina used during the low-intensity collector-bar leakage response. Fused alumina is pushed into the broken area so that it reaches the bottom and helps control the leakage path.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "LOW_LEAKAGE_STEP_2",
+      "display": {
+        "en": "SHOVEL\n\nIn this training visualization, the shovel is used to take fused alumina from the prepared container and bring it toward the affected leakage area. The fused alumina is then pushed into the broken area so that it reaches the bottom and helps control the leakage path.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "SHOVEL. In this training visualization, the shovel is used to take fused alumina from the prepared container and bring it toward the affected leakage area. The fused alumina is then pushed into the broken area so that it reaches the bottom and helps control the leakage path.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "LOW_LEAKAGE_STEP_3",
+      "display": {
+        "en": "CROWBAR\n\nUse the crowbar to break and open the compacted material around the affected area. This creates a passage for the fused alumina and helps establish a controlled path for the leakage.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "CROWBAR. Use the crowbar to break and open the compacted material around the affected area. This creates a passage for the fused alumina and helps establish a controlled path for the leakage.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "LOW_LEAKAGE_CONTROLLED",
+      "display": {
+        "en": "CONTROLLED LEAKAGE\n\nSide breaking and fused alumina pushing help establish a controlled leakage path. The leakage is reduced to a thin controlled stream rather than an uncontrolled flow.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "CONTROLLED LEAKAGE. Side breaking and fused alumina pushing help establish a controlled leakage path. The leakage is reduced to a thin controlled stream rather than an uncontrolled flow.",
+        "hi": "",
+        "or": ""
+      }
+    },
+    {
+      "key": "TASK_10",
+      "display": {
+        "en": "Metal leakage has progressed beyond the affected area and is forming a pool on the floor. The flow must be controlled and directed through an established channel to prevent uncontrolled metal accumulation.",
+        "hi": "",
+        "or": ""
+      },
+      "speech": {
+        "en": "Metal leakage has progressed beyond the affected area and is forming a pool on the floor. The flow must be controlled and directed through an established channel to prevent uncontrolled metal accumulation.",
+        "hi": "",
+        "or": ""
+      }
+    }
+  ]
+}
