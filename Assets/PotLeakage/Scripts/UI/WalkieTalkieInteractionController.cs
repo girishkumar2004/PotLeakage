@@ -229,10 +229,21 @@ namespace PotLeakage.UI
 
         private void Update()
         {
-            // Only accept clicks when waiting for user interaction
-            if (currentState != WalkieTalkieState.WaitingForShift && currentState != WalkieTalkieState.WaitingForTechnical)
+            bool isWalkie2 = (gameObject.name == "walkietalkie_2" || transform.root.name == "walkietalkie_2");
+
+            // Only accept clicks when waiting for user interaction (or when walkietalkie_2 is blinking in Task 11)
+            if (!isWalkie2 && currentState != WalkieTalkieState.WaitingForShift && currentState != WalkieTalkieState.WaitingForTechnical)
             {
                 return;
+            }
+
+            if (isWalkie2)
+            {
+                var ui = UnityEngine.Object.FindFirstObjectByType<PotLeakageUIController>();
+                if (ui == null || !ui.IsWalkieTalkie2Blinking)
+                {
+                    return;
+                }
             }
 
             bool mouseClicked = false;
@@ -260,8 +271,26 @@ namespace PotLeakage.UI
                     Ray ray = cam.ScreenPointToRay(mousePos);
                     if (Physics.Raycast(ray, out RaycastHit hit))
                     {
-                        if (hit.collider != null && (hit.collider.gameObject == defaultMaterial007 || hit.collider.gameObject == gameObject || hit.collider.transform.IsChildOf(transform)))
+                        if (hit.collider != null && (hit.collider.gameObject == defaultMaterial007 || hit.collider.gameObject == gameObject || hit.collider.transform.IsChildOf(transform) || transform.IsChildOf(hit.collider.transform)))
                         {
+                            if (isWalkie2)
+                            {
+                                var ui = UnityEngine.Object.FindFirstObjectByType<PotLeakageUIController>();
+                                if (ui != null)
+                                {
+                                    ui.OnWalkieTalkie2Clicked();
+                                    return;
+                                }
+                            }
+
+                            var commSys = UnityEngine.Object.FindFirstObjectByType<WalkieCommunicationSystem>(FindObjectsInactive.Include);
+                            if (commSys != null)
+                            {
+                                commSys.gameObject.SetActive(true);
+                                commSys.enabled = true;
+                                commSys.OnWalkieTalkieSelected();
+                                return;
+                            }
                             OnWalkieTalkieClicked();
                         }
                     }
@@ -273,9 +302,28 @@ namespace PotLeakage.UI
         {
             if (eventData.button == PointerEventData.InputButton.Left)
             {
+                if (gameObject.name == "walkietalkie_2" || transform.root.name == "walkietalkie_2")
+                {
+                    var ui = UnityEngine.Object.FindFirstObjectByType<PotLeakageUIController>();
+                    if (ui != null)
+                    {
+                        ui.OnWalkieTalkie2Clicked();
+                        return;
+                    }
+                }
+
+                var commSys = UnityEngine.Object.FindFirstObjectByType<WalkieCommunicationSystem>();
+                if (commSys != null && commSys.enabled)
+                {
+                    commSys.OnWalkieTalkieSelected();
+                    return;
+                }
                 OnWalkieTalkieClicked();
             }
         }
+
+        public const string UpperSideShellRadioVO = "Shift Superintendent, Technical In-charge, Pot 69 has developed a side shell leakage. The leakage is visible from the upper side of the pot.";
+        public const string UpperSideShellRadioVOKey = "RADIO_VO_TASK_03";
 
         /// <summary>
         /// Public interaction trigger callable programmatically, from tests or UI events.
@@ -287,8 +335,19 @@ namespace PotLeakage.UI
 
         private void OnWalkieTalkieClicked()
         {
+            if (gameObject.name == "walkietalkie_2" || transform.root.name == "walkietalkie_2")
+            {
+                var ui = UnityEngine.Object.FindFirstObjectByType<PotLeakageUIController>();
+                if (ui != null)
+                {
+                    ui.OnWalkieTalkie2Clicked();
+                    return;
+                }
+            }
+
             InitializeReferences();
             StopWalkieTalkieBlink();
+            RestoreOriginalMaterial();
 
             if (currentState == WalkieTalkieState.WaitingForShift)
             {
@@ -298,26 +357,66 @@ namespace PotLeakage.UI
             {
                 HandleTechnicalPress();
             }
+            else if (currentState == WalkieTalkieState.Inactive)
+            {
+                var commSys = UnityEngine.Object.FindFirstObjectByType<WalkieCommunicationSystem>(FindObjectsInactive.Include);
+                if (commSys != null)
+                {
+                    commSys.gameObject.SetActive(true);
+                    commSys.enabled = true;
+                    commSys.OnWalkieTalkieSelected();
+                    return;
+                }
+                // Direct activation and response
+                HandleUpperSideShellCommunication();
+            }
+        }
+
+        public void HandleUpperSideShellCommunication()
+        {
+            currentState = WalkieTalkieState.ShiftAudioPlaying;
+
+            if (personnelImagesRoot != null) personnelImagesRoot.SetActive(true);
+            if (shiftImage != null) shiftImage.SetActive(true);
+            if (technicalImage != null) technicalImage.SetActive(true);
+
+            // Retain fluorescent green highlight
+            SwapHighlightMaterial();
+
+            var mgr = TruckTyreReplacement.Core.Manager.Instance;
+            if (mgr != null)
+            {
+                mgr.SpeakText(UpperSideShellRadioVO, UpperSideShellRadioVOKey);
+            }
+
+            PlayCommunicationSequence(() =>
+            {
+                currentState = WalkieTalkieState.Completed;
+                RestoreOriginalMaterial();
+            });
         }
 
         private void HandleShiftPress()
         {
             currentState = WalkieTalkieState.ShiftAudioPlaying;
 
-            // Shift.png DISAPPEARS
-            if (shiftImage != null) shiftImage.SetActive(false);
+            // Retain fluorescent green highlight during audio
+            SwapHighlightMaterial();
 
-            // Technical.png REMAINS VISIBLE
+            if (shiftImage != null) shiftImage.SetActive(false);
             if (technicalImage != null) technicalImage.SetActive(true);
 
-            // Unhighlight / dim walkie talkie during audio
-            RestoreOriginalMaterial();
+            var mgr = TruckTyreReplacement.Core.Manager.Instance;
+            if (mgr != null)
+            {
+                mgr.SpeakText(UpperSideShellRadioVO, UpperSideShellRadioVOKey);
+            }
 
-            // Play Click -> Call -> Wait till call finishes -> Warning -> Wait till warning finishes -> Walkie available again
+            // Play Click -> Call -> Wait till call finishes -> Warning -> Wait till warning finishes
             PlayCommunicationSequence(() =>
             {
                 currentState = WalkieTalkieState.WaitingForTechnical;
-                // Re-highlight walkie talkie waiting for second press
+                // Retain fluorescent green highlight
                 SwapHighlightMaterial();
             });
         }
@@ -326,18 +425,15 @@ namespace PotLeakage.UI
         {
             currentState = WalkieTalkieState.TechnicalAudioPlaying;
 
-            // Technical.png DISAPPEARS
+            // Retain fluorescent green highlight during audio
+            SwapHighlightMaterial();
+
             if (technicalImage != null) technicalImage.SetActive(false);
 
-            // Unhighlight walkie talkie during audio
-            RestoreOriginalMaterial();
-
-            // Play Click -> Call -> Wait till call finishes -> Warning -> Wait till warning finishes -> Walkie complete
             PlayCommunicationSequence(() =>
             {
                 currentState = WalkieTalkieState.Completed;
-                // Re-highlight walkie talkie upon completion
-                SwapHighlightMaterial();
+                RestoreOriginalMaterial();
             });
         }
 
@@ -401,24 +497,7 @@ namespace PotLeakage.UI
                 yield return new WaitForSeconds(fallbackAudioDuration);
             }
 
-            // 3. Play Warning audio on dedicated walkie audioSource
-            if (warnClip != null && audioSource != null)
-            {
-                audioSource.clip = warnClip;
-                audioSource.Play();
-
-                yield return null; // allow audio system to begin playback
-
-                while (audioSource != null && audioSource.isPlaying)
-                {
-                    yield return null;
-                }
-            }
-            else
-            {
-                yield return new WaitForSeconds(fallbackAudioDuration);
-            }
-
+            // 3. Warning audio playback on walkie-talkie press is removed per specification
             audioCoroutine = null;
             pendingAudioCallback = null;
             onComplete?.Invoke();
@@ -502,6 +581,15 @@ namespace PotLeakage.UI
         {
             InitializeReferences();
 
+            var ui = PotLeakageUIController.Instance ?? UnityEngine.Object.FindAnyObjectByType<PotLeakageUIController>();
+            if (ui != null)
+            {
+                ui.StartWalkieTalkieBlink();
+                IsBlinking = ui.IsWalkieTalkieBlinking;
+                SwapHighlightMaterial();
+                return;
+            }
+
             if (blinkCoroutine != null)
             {
                 StopCoroutine(blinkCoroutine);
@@ -519,6 +607,12 @@ namespace PotLeakage.UI
 
         public void StopWalkieTalkieBlink()
         {
+            var ui = PotLeakageUIController.Instance ?? UnityEngine.Object.FindAnyObjectByType<PotLeakageUIController>();
+            if (ui != null)
+            {
+                ui.StopWalkieTalkieBlink();
+            }
+
             if (blinkCoroutine != null)
             {
                 StopCoroutine(blinkCoroutine);
@@ -557,6 +651,24 @@ namespace PotLeakage.UI
             {
                 wtMeshRenderer.sharedMaterial = highlightMaterial;
             }
+            var ui = PotLeakageUIController.Instance ?? UnityEngine.Object.FindAnyObjectByType<PotLeakageUIController>();
+            if (ui != null)
+            {
+                var slots = ui.GetWalkieTalkieBlinkSlots();
+                if (slots.Count == 0) ui.CollectWalkieTalkieBlinkTargets();
+                foreach (var s in ui.GetWalkieTalkieBlinkSlots())
+                {
+                    if (s.renderer != null)
+                    {
+                        Material[] mats = s.renderer.sharedMaterials;
+                        if (s.slotIndex >= 0 && s.slotIndex < mats.Length)
+                        {
+                            mats[s.slotIndex] = highlightMaterial != null ? highlightMaterial : ui.potHighlightMaterial;
+                            s.renderer.sharedMaterials = mats;
+                        }
+                    }
+                }
+            }
         }
 
         public void RestoreOriginalMaterial()
@@ -565,6 +677,22 @@ namespace PotLeakage.UI
             if (wtMeshRenderer != null && originalMaterial != null)
             {
                 wtMeshRenderer.sharedMaterial = originalMaterial;
+            }
+            var ui = PotLeakageUIController.Instance ?? UnityEngine.Object.FindAnyObjectByType<PotLeakageUIController>();
+            if (ui != null)
+            {
+                foreach (var s in ui.GetWalkieTalkieBlinkSlots())
+                {
+                    if (s.renderer != null && s.originalMaterial != null)
+                    {
+                        Material[] mats = s.renderer.sharedMaterials;
+                        if (s.slotIndex >= 0 && s.slotIndex < mats.Length)
+                        {
+                            mats[s.slotIndex] = s.originalMaterial;
+                            s.renderer.sharedMaterials = mats;
+                        }
+                    }
+                }
             }
         }
 

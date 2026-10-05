@@ -135,6 +135,8 @@ namespace TruckTyreReplacement.Core
         {
             public string key;
             public string text;
+            public string voiceProfile;
+            public float pitch;
         }
 
         private readonly Queue<SpeechRequest> speechQueue = new Queue<SpeechRequest>();
@@ -171,6 +173,7 @@ namespace TruckTyreReplacement.Core
         public bool IsSpeaking => isSpeaking;
 
         public event Action<LocalTTSLanguage> OnLanguageChanged;
+        public static event Action<string, string> OnSpeechCompleted;
 
         public string TrainingJsonPath => Path.Combine(Application.persistentDataPath, "TrainingData", "training.json");
 
@@ -1020,9 +1023,14 @@ namespace TruckTyreReplacement.Core
 
         public void SpeakText(string text, string key = "")
         {
+            SpeakText(text, key, "", 1.0f);
+        }
+
+        public void SpeakText(string text, string key, string voiceProfile, float pitch = 1.0f)
+        {
             if (string.IsNullOrEmpty(text)) return;
             string keyToUse = !string.IsNullOrEmpty(key) ? key : text;
-            SpeakDirect(text, keyToUse);
+            SpeakDirect(text, keyToUse, voiceProfile, pitch);
         }
 
         public void Speak(string textOrKey)
@@ -1036,10 +1044,10 @@ namespace TruckTyreReplacement.Core
             {
                 textToSpeak = GetSpeechText(textOrKey);
             }
-            SpeakDirect(textToSpeak, resolvedKey);
+            SpeakDirect(textToSpeak, resolvedKey, "", 1.0f);
         }
 
-        private void SpeakDirect(string textToSpeak, string key)
+        private void SpeakDirect(string textToSpeak, string key, string voiceProfile = "", float pitch = 1.0f)
         {
             if (string.IsNullOrEmpty(textToSpeak)) return;
 
@@ -1052,13 +1060,19 @@ namespace TruckTyreReplacement.Core
             string cleanText = LocalTTSCacheService.NormalizeSpeechText(textToSpeak);
             if (string.IsNullOrEmpty(cleanText)) return;
 
-            if (!string.IsNullOrEmpty(lastSpokenKey) && string.Equals(key, lastSpokenKey, StringComparison.OrdinalIgnoreCase) && cleanText == lastSpokenText && voiceAudioSource != null && voiceAudioSource.isPlaying)
-                return;
+            if (!string.IsNullOrEmpty(lastSpokenKey) && string.Equals(key, lastSpokenKey, StringComparison.OrdinalIgnoreCase) && cleanText == lastSpokenText)
+            {
+                if (isSpeaking || (voiceAudioSource != null && voiceAudioSource.isPlaying) || speechQueue.Count > 0)
+                {
+                    Debug.Log($"[Manager][TTS] Suppressing duplicate speech trigger for key '{key}'");
+                    return;
+                }
+            }
 
             lastSpokenKey = key;
             lastSpokenText = cleanText;
 
-            Debug.Log($"[AIR TTS]\nKey = {key}\nLanguage = {currentLanguage}\nSpeechText = {cleanText}\nAudioSource = {(voiceAudioSource != null ? voiceAudioSource.name : "null")}\nPlayRequested = TRUE");
+            Debug.Log($"[AIR TTS]\nKey = {key}\nLanguage = {currentLanguage}\nVoice = {voiceProfile}\nSpeechText = {cleanText}\nAudioSource = {(voiceAudioSource != null ? voiceAudioSource.name : "null")}\nPlayRequested = TRUE");
             Debug.Log($"[TTS] Speaking: \"{cleanText}\"");
 
             if (interruptCurrentSpeech)
@@ -1066,7 +1080,7 @@ namespace TruckTyreReplacement.Core
                 StopSpeech();
             }
 
-            speechQueue.Enqueue(new SpeechRequest { key = key, text = cleanText });
+            speechQueue.Enqueue(new SpeechRequest { key = key, text = cleanText, voiceProfile = voiceProfile, pitch = pitch });
             isSpeaking = true;
 
             if (Application.isPlaying)
@@ -1080,11 +1094,12 @@ namespace TruckTyreReplacement.Core
             {
                 // In Edit Mode, verify and preload audio clip synchronously
                 string langName = currentLanguage.ToString();
-                string hash = LocalTTSCacheService.ComputeSpeechHash(langName, cleanText);
-                ResolveClipForPlayback(langName, hash, cleanText, out TTSCacheStatus status, out _);
+                string hash = LocalTTSCacheService.ComputeSpeechHash(langName, cleanText, voiceProfile);
+                ResolveClipForPlayback(langName, hash, cleanText, voiceProfile, out TTSCacheStatus status, out _);
                 isSpeaking = false;
-                Debug.Log($"[Manager][EditMode] Speak validated: '{cleanText}' (key='{key}', status={status})");
+                Debug.Log($"[Manager][EditMode] Speak validated: '{cleanText}' (key='{key}', voice='{voiceProfile}', status={status})");
                 Debug.Log("[TTS] Completed");
+                OnSpeechCompleted?.Invoke(key, cleanText);
             }
         }
 
@@ -1103,7 +1118,22 @@ namespace TruckTyreReplacement.Core
             }
         }
 
-        public AudioSource GetVoiceAudioSource() => voiceAudioSource;
+        public AudioSource GetVoiceAudioSource()
+        {
+            if (voiceAudioSource == null)
+            {
+                voiceAudioSource = GetComponent<AudioSource>();
+                if (voiceAudioSource == null)
+                {
+                    voiceAudioSource = gameObject.AddComponent<AudioSource>();
+                }
+                voiceAudioSource.spatialBlend = 0.0f;
+                voiceAudioSource.volume = voiceVolume;
+                voiceAudioSource.playOnAwake = false;
+                voiceAudioSource.loop = false;
+            }
+            return voiceAudioSource;
+        }
 
         public AudioSource GetSFXAudioSource()
         {
@@ -1134,22 +1164,38 @@ namespace TruckTyreReplacement.Core
             while (speechQueue.Count > 0)
             {
                 var request = speechQueue.Dequeue();
-                string hash = LocalTTSCacheService.ComputeSpeechHash(langName, request.text);
+                string hash = LocalTTSCacheService.ComputeSpeechHash(langName, request.text, request.voiceProfile);
 
-                AudioClip clipToPlay = ResolveClipForPlayback(langName, hash, request.text, out TTSCacheStatus status, out string expectedPath);
+                AudioClip clipToPlay = ResolveClipForPlayback(langName, hash, request.text, request.voiceProfile, out TTSCacheStatus status, out string expectedPath);
 
-                Debug.Log($"[TTS CACHE]\nKey = {request.key}\nLanguage = {langName}\nHash = {hash}\nFile = {Path.GetFileName(expectedPath)}\nStatus = {status.ToString().ToUpperInvariant()}");
+                if (voiceAudioSource == null)
+                {
+                    voiceAudioSource = GetVoiceAudioSource();
+                }
+
+                if (request.key.IndexOf("welcome", StringComparison.OrdinalIgnoreCase) >= 0 || request.key.Contains("01") || request.text.IndexOf("Welcome to the Vedanta", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Debug.Log("[PotLeakage TTS] Task 01 Welcome requested");
+                    Debug.Log($"[PotLeakage TTS] SpeechText = \"{request.text}\"");
+                    Debug.Log($"[PotLeakage TTS] Audio loaded = {(clipToPlay != null ? "TRUE" : "FALSE")}");
+                    Debug.Log($"[PotLeakage TTS] Playback started = {(voiceAudioSource != null && clipToPlay != null ? "TRUE" : "FALSE")}");
+                }
+
+                Debug.Log($"[TTS CACHE]\nKey = {request.key}\nLanguage = {langName}\nVoice = {request.voiceProfile}\nHash = {hash}\nFile = {Path.GetFileName(expectedPath)}\nStatus = {status.ToString().ToUpperInvariant()}");
 
                 if (clipToPlay != null && voiceAudioSource != null)
                 {
-                    Debug.Log($"[TTS RESOLVED]\nKey = {request.key}\nLanguage = {langName}\nHash = {hash}\nStatus = VALID");
+                    Debug.Log($"[TTS RESOLVED]\nKey = {request.key}\nLanguage = {langName}\nVoice = {request.voiceProfile}\nHash = {hash}\nStatus = VALID");
 
                     voiceAudioSource.Stop();
                     voiceAudioSource.clip = clipToPlay;
                     voiceAudioSource.volume = voiceVolume;
+                    voiceAudioSource.pitch = request.pitch > 0.1f ? request.pitch : 1.0f;
+                    voiceAudioSource.time = 0f;
+                    yield return null; // 1-frame settle buffer to let Unity audio engine prime the clip
                     voiceAudioSource.Play();
 
-                    Debug.Log($"[TTS PLAY START]\nKey = {request.key}\nLanguage = {langName}\nHash = {hash}\nClip = {clipToPlay.name}");
+                    Debug.Log($"[TTS PLAY START]\nKey = {request.key}\nLanguage = {langName}\nVoice = {request.voiceProfile}\nHash = {hash}\nClip = {clipToPlay.name}");
 
                     // Wait for playback to actually begin, then for it to finish -
                     // never assume completion purely from clip.length, and never treat
@@ -1177,12 +1223,15 @@ namespace TruckTyreReplacement.Core
                         Debug.Log($"[TTS PLAY COMPLETE]\nKey = {request.key}\nLanguage = {langName}\nHash = {hash}");
                         Debug.Log("[TTS] Completed");
                     }
+                    voiceAudioSource.pitch = 1.0f;
+                    OnSpeechCompleted?.Invoke(request.key, request.text);
                 }
                 else
                 {
                     Debug.LogWarning($"[TTS BLOCKED]\nKey = {request.key}\nLanguage = {langName}\nStatus = {status.ToString().ToUpperInvariant()}");
                     Debug.LogWarning($"[TTS MISSING]\nKey = {request.key}\nLanguage = {langName}\nSpeech = {request.text}\nExpectedPath = {expectedPath}");
                     yield return new WaitForSeconds(1.0f);
+                    OnSpeechCompleted?.Invoke(request.key, request.text);
                 }
             }
 
@@ -1192,12 +1241,27 @@ namespace TruckTyreReplacement.Core
 
         public AudioClip ResolveClipForPlayback(string langName, string hash, out TTSCacheStatus status, out string expectedPath)
         {
-            return ResolveClipForPlayback(langName, hash, null, out status, out expectedPath);
+            return ResolveClipForPlayback(langName, hash, null, "", out status, out expectedPath);
         }
 
         public AudioClip ResolveClipForPlayback(string langName, string hash, string speechText, out TTSCacheStatus status, out string expectedPath)
         {
+            return ResolveClipForPlayback(langName, hash, speechText, "", out status, out expectedPath);
+        }
+
+        public AudioClip ResolveClipForPlayback(string langName, string hash, string speechText, string voiceProfile, out TTSCacheStatus status, out string expectedPath)
+        {
             expectedPath = ttsCache.GetCacheFilePath(langName, hash);
+            if (!File.Exists(expectedPath))
+            {
+                string saPath = Path.Combine(Application.streamingAssetsPath, "TTSCache", ttsCache.GetCacheFileName(langName, hash));
+                if (File.Exists(saPath)) expectedPath = saPath;
+                else
+                {
+                    string projPath = Path.Combine(Application.dataPath, "PotLeakage", "Audio", "TTS", ttsCache.GetCacheFileName(langName, hash));
+                    if (File.Exists(projPath)) expectedPath = projPath;
+                }
+            }
 
             if (ttsCache.TryGetMemoryClip(langName, hash, out AudioClip memClip) && memClip != null)
             {
@@ -1207,7 +1271,7 @@ namespace TruckTyreReplacement.Core
 
             if (!File.Exists(expectedPath) && !string.IsNullOrEmpty(speechText))
             {
-                LocalTTSCacheService.GenerateWav(expectedPath, speechText);
+                LocalTTSCacheService.GenerateWav(expectedPath, speechText, voiceProfile);
             }
 
             status = File.Exists(expectedPath) ? TTSCacheStatus.Valid : TTSCacheStatus.Missing;
@@ -1226,13 +1290,23 @@ namespace TruckTyreReplacement.Core
             return null;
         }
 
+        public void RegisterPreloadedClip(string langName, string hash, AudioClip clip)
+        {
+            if (clip != null && ttsCache != null)
+            {
+                ttsCache.SetMemoryClip(langName, hash, clip);
+            }
+        }
+
         public TTSCacheStatus GetSpeechCacheStatus(string key)
         {
-            var entry = translationDatabase?.Find(e => string.Equals(e.key, key, StringComparison.OrdinalIgnoreCase));
-            if (entry == null) return TTSCacheStatus.Missing;
-
             string langName = currentLanguage.ToString();
-            string speech = GetSpeechTextForLanguage(entry, currentLanguage);
+            string speech = key;
+            var entry = translationDatabase?.Find(e => string.Equals(e.key, key, StringComparison.OrdinalIgnoreCase));
+            if (entry != null)
+            {
+                speech = GetSpeechTextForLanguage(entry, currentLanguage);
+            }
             string clean = LocalTTSCacheService.NormalizeSpeechText(speech);
             string hash = LocalTTSCacheService.ComputeSpeechHash(langName, clean);
             return ttsCache.GetStatus(key, langName, hash, out _);

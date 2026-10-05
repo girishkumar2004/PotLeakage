@@ -56,6 +56,16 @@ namespace PotLeakage.Core
         public AudioClip nextButtonSFX;
         public AudioClip cameraTransitionSFX;
 
+        [Header("BACKGROUND TRAINING AUDIO")]
+        [Tooltip("Configurable background training audio clip (loops during training)")]
+        public AudioClip backgroundTrainingAudio;
+        [Tooltip("Volume for background training audio (0.0 to 1.0)")]
+        [Range(0f, 1f)]
+        public float backgroundAudioVolume = 0.3f;
+        [Tooltip("Whether background training audio loops")]
+        public bool backgroundAudioLoop = true;
+        public AudioSource backgroundAudioSource;
+
         [Header("VFX")]
         public MoltenAluminiumVFXController moltenAluminiumVFX;
 
@@ -127,6 +137,37 @@ namespace PotLeakage.Core
         private void HandleTaskCompleted(int taskIndex, Task task)
         {
             Debug.Log($"[PotLeakageManager] Task Completed: Index={taskIndex}, Name='{task?.TaskName}'");
+        }
+
+        public void PlayBackgroundTrainingAudio()
+        {
+            if (backgroundAudioSource == null)
+            {
+                backgroundAudioSource = GetComponent<AudioSource>();
+                if (backgroundAudioSource == null)
+                {
+                    backgroundAudioSource = gameObject.AddComponent<AudioSource>();
+                }
+            }
+            if (backgroundAudioSource != null && backgroundTrainingAudio != null)
+            {
+                backgroundAudioSource.clip = backgroundTrainingAudio;
+                backgroundAudioSource.loop = backgroundAudioLoop;
+                backgroundAudioSource.volume = backgroundAudioVolume;
+                backgroundAudioSource.spatialBlend = 0f;
+                if (!backgroundAudioSource.isPlaying)
+                {
+                    backgroundAudioSource.Play();
+                }
+            }
+        }
+
+        public void StopBackgroundTrainingAudio()
+        {
+            if (backgroundAudioSource != null && backgroundAudioSource.isPlaying)
+            {
+                backgroundAudioSource.Stop();
+            }
         }
 
         /// <summary>

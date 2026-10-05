@@ -38,15 +38,17 @@ namespace TruckTyreReplacement.Core
 
         public static string NormalizeSpeechText(string input)
         {
-            return string.IsNullOrEmpty(input) ? "" : input.Trim();
+            if (string.IsNullOrEmpty(input)) return "";
+            return System.Text.RegularExpressions.Regex.Replace(input, @"\s+", " ").Trim();
         }
 
-        public static string ComputeSpeechHash(string lang, string text)
+        public static string ComputeSpeechHash(string lang, string text, string voiceProfile = "")
         {
             if (string.IsNullOrEmpty(text)) return "";
             using (var sha = SHA256.Create())
             {
-                byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(lang + ":" + text));
+                string input = string.IsNullOrEmpty(voiceProfile) ? (lang + ":" + text) : (lang + ":" + voiceProfile + ":" + text);
+                byte[] bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
                 var sb = new StringBuilder(bytes.Length * 2);
                 foreach (byte b in bytes) sb.Append(b.ToString("x2"));
                 return sb.ToString();
@@ -56,7 +58,20 @@ namespace TruckTyreReplacement.Core
         public TTSCacheStatus GetStatus(string key, string lang, string hash, out string expectedPath)
         {
             expectedPath = GetCacheFilePath(lang, hash);
-            return File.Exists(expectedPath) ? TTSCacheStatus.Valid : TTSCacheStatus.Missing;
+            if (File.Exists(expectedPath)) return TTSCacheStatus.Valid;
+            string saPath = Path.Combine(Application.streamingAssetsPath, "TTSCache", GetCacheFileName(lang, hash));
+            if (File.Exists(saPath))
+            {
+                expectedPath = saPath;
+                return TTSCacheStatus.Valid;
+            }
+            string projPath = Path.Combine(Application.dataPath, "PotLeakage", "Audio", "TTS", GetCacheFileName(lang, hash));
+            if (File.Exists(projPath))
+            {
+                expectedPath = projPath;
+                return TTSCacheStatus.Valid;
+            }
+            return TTSCacheStatus.Missing;
         }
 
         public string GetCacheFileName(string lang, string hash) => $"{lang}_{hash}.wav";
@@ -81,6 +96,16 @@ namespace TruckTyreReplacement.Core
         public AudioClip LoadClipFromDisk(string lang, string hash, string clipName)
         {
             string path = GetCacheFilePath(lang, hash);
+            if (!File.Exists(path))
+            {
+                string saPath = Path.Combine(Application.streamingAssetsPath, "TTSCache", GetCacheFileName(lang, hash));
+                if (File.Exists(saPath)) path = saPath;
+            }
+            if (!File.Exists(path))
+            {
+                string projPath = Path.Combine(Application.dataPath, "PotLeakage", "Audio", "TTS", GetCacheFileName(lang, hash));
+                if (File.Exists(projPath)) path = projPath;
+            }
             if (!File.Exists(path)) return null;
             try
             {
@@ -141,9 +166,35 @@ namespace TruckTyreReplacement.Core
                             return null;
                         }
 
-                        var clip = AudioClip.Create(clipName, sampleCount / channels, channels, sampleRate, false);
-                        clip.SetData(samples, 0);
-                        return clip;
+                        // Ensure a clean lead-in silence (50-70ms) to eliminate initial clipping from DSP ramp-in.
+                        int leadCheckSamples = Mathf.Min(sampleCount, Mathf.RoundToInt(sampleRate * 0.040f) * channels);
+                        bool hasInitialSilence = true;
+                        for (int i = 0; i < leadCheckSamples; i++)
+                        {
+                            if (Mathf.Abs(samples[i]) > 0.015f)
+                            {
+                                hasInitialSilence = false;
+                                break;
+                            }
+                        }
+
+                        if (!hasInitialSilence)
+                        {
+                            int paddingSamplesPerChannel = Mathf.RoundToInt(sampleRate * 0.065f); // 65ms silence padding
+                            int totalPaddingSamples = paddingSamplesPerChannel * channels;
+                            float[] paddedSamples = new float[totalPaddingSamples + sampleCount];
+                            Array.Copy(samples, 0, paddedSamples, totalPaddingSamples, sampleCount);
+
+                            var clip = AudioClip.Create(clipName, (sampleCount / channels) + paddingSamplesPerChannel, channels, sampleRate, false);
+                            clip.SetData(paddedSamples, 0);
+                            return clip;
+                        }
+                        else
+                        {
+                            var clip = AudioClip.Create(clipName, sampleCount / channels, channels, sampleRate, false);
+                            clip.SetData(samples, 0);
+                            return clip;
+                        }
                     }
                     pos += 8 + size;
                 }
@@ -157,7 +208,7 @@ namespace TruckTyreReplacement.Core
             }
         }
 
-        public static bool GenerateWav(string filePath, string text)
+        public static bool GenerateWav(string filePath, string text, string voiceProfile = "")
         {
             if (string.IsNullOrEmpty(text)) return false;
             try
@@ -170,7 +221,33 @@ namespace TruckTyreReplacement.Core
 
                 string escapedText = text.Replace("'", "''").Replace("\"", "`\"");
                 string normalizedPath = filePath.Replace("\\", "/");
-                string script = $"Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; $s.SetOutputToWaveFile('{normalizedPath}'); $s.Speak('{escapedText}'); $s.Dispose();";
+
+                bool isShift = (!string.IsNullOrEmpty(voiceProfile) && 
+                    voiceProfile.IndexOf("Shift", StringComparison.OrdinalIgnoreCase) >= 0);
+
+                bool isMark = (!string.IsNullOrEmpty(voiceProfile) && 
+                    (voiceProfile.IndexOf("Mark", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     voiceProfile.IndexOf("Technical", StringComparison.OrdinalIgnoreCase) >= 0));
+
+                bool isDavid = (!string.IsNullOrEmpty(voiceProfile) && 
+                    (voiceProfile.IndexOf("David", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     voiceProfile.IndexOf("Male", StringComparison.OrdinalIgnoreCase) >= 0));
+
+                bool isZira = !isMark && !isDavid;
+
+                string targetVoice = isMark ? "Microsoft Mark Desktop" : (isDavid ? "Microsoft David Desktop" : "Microsoft Zira Desktop");
+                string genderHint = (isMark || isDavid) ? "[System.Speech.Synthesis.VoiceGender]::Male" : "[System.Speech.Synthesis.VoiceGender]::Female";
+
+                string script = 
+                    "Add-Type -AssemblyName System.Speech; " +
+                    "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; " +
+                    "$s.Rate = -1; " +
+                    "try { $s.SelectVoice('" + targetVoice + "'); } catch { " +
+                        "try { $s.SelectVoiceByHints(" + genderHint + "); } catch {} " +
+                    "}; " +
+                    "$s.SetOutputToWaveFile('" + normalizedPath + "'); " +
+                    "$s.Speak('" + escapedText + "'); " +
+                    "$s.Dispose();";
 
                 var psi = new System.Diagnostics.ProcessStartInfo
                 {
@@ -184,7 +261,7 @@ namespace TruckTyreReplacement.Core
 
                 using (var proc = System.Diagnostics.Process.Start(psi))
                 {
-                    proc.WaitForExit(15000);
+                    proc.WaitForExit(5000);
                     return File.Exists(filePath) && new FileInfo(filePath).Length > 0;
                 }
             }

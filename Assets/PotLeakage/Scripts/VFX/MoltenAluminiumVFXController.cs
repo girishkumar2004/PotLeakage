@@ -29,6 +29,16 @@ namespace PotLeakage.VFX
         [Tooltip("Drop destination reference: TransformPoints/drop (READ-ONLY)")]
         public Transform dropTransform;
 
+        [Header("Drop Path Transforms (READ-ONLY)")]
+        public Transform dropPoint;
+        public Transform dropPoint1;
+        public Transform dropPoint2;
+        public ParticleSystem moltenLeakageSmoke;
+
+        [Header("Dense Molten Liquid Particle Stream")]
+        [Tooltip("Dense particle stream representing the continuous molten liquid flow (replaces large mesh)")]
+        public MoltenMetalStreamParticles streamParticles;
+
         [Tooltip("Optional secondary droplets around the drop area (Max 40 particles)")]
         public ParticleSystem moltenMetalDroplets;
 
@@ -124,13 +134,32 @@ namespace PotLeakage.VFX
 #endif
             }
 
-            // Resolve dropTransform / dropTarget strictly as reference
-            if (dropTransform == null)
+            // Resolve dropPoint, dropPoint1, dropPoint2 strictly as reference
+            if (dropPoint == null)
             {
                 var dropGo = GameObject.Find("CameraSystem/TransformPoints/drop")
                           ?? GameObject.Find("TransformPoints/drop")
                           ?? GameObject.Find("drop");
-                if (dropGo != null) dropTransform = dropGo.transform;
+                if (dropGo != null) dropPoint = dropGo.transform;
+            }
+            if (dropPoint1 == null)
+            {
+                var dropGo1 = GameObject.Find("CameraSystem/TransformPoints/drop (1)")
+                           ?? GameObject.Find("TransformPoints/drop (1)")
+                           ?? GameObject.Find("drop (1)");
+                if (dropGo1 != null) dropPoint1 = dropGo1.transform;
+            }
+            if (dropPoint2 == null)
+            {
+                var dropGo2 = GameObject.Find("CameraSystem/TransformPoints/drop (2)")
+                           ?? GameObject.Find("TransformPoints/drop (2)")
+                           ?? GameObject.Find("drop (2)");
+                if (dropGo2 != null) dropPoint2 = dropGo2.transform;
+            }
+
+            if (dropTransform == null && dropPoint != null)
+            {
+                dropTransform = dropPoint;
             }
 
             if (dropTarget == null && dropTransform != null)
@@ -155,13 +184,25 @@ namespace PotLeakage.VFX
                 {
                     flowMeshRenderer = flowMesh.GetComponent<MeshRenderer>();
                 }
-                if (flowMesh.sourceTransform == null && sourceTransform != null)
+                if (flowMesh.drop == null && dropPoint != null)
                 {
-                    flowMesh.sourceTransform = sourceTransform;
+                    flowMesh.drop = dropPoint;
+                }
+                if (flowMesh.drop1 == null && dropPoint1 != null)
+                {
+                    flowMesh.drop1 = dropPoint1;
+                }
+                if (flowMesh.drop2 == null && dropPoint2 != null)
+                {
+                    flowMesh.drop2 = dropPoint2;
                 }
                 if (flowMesh.dropTransform == null && dropTransform != null)
                 {
                     flowMesh.dropTransform = dropTransform;
+                }
+                if (flowMesh.sourceTransform == null && sourceTransform != null)
+                {
+                    flowMesh.sourceTransform = sourceTransform;
                 }
             }
 
@@ -195,10 +236,11 @@ namespace PotLeakage.VFX
 
             if (moltenMetalDroplets != null)
             {
-                var main = moltenMetalDroplets.main;
-                main.maxParticles = Mathf.Min(main.maxParticles, 40);
-                main.playOnAwake = false;
-                main.loop = true;
+                moltenMetalDroplets.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                moltenMetalDroplets.Clear(true);
+                var emission = moltenMetalDroplets.emission;
+                emission.enabled = false;
+                moltenMetalDroplets.gameObject.SetActive(false);
             }
 
             // Ensure mesh is constructed
@@ -227,6 +269,32 @@ namespace PotLeakage.VFX
                 floorSpill.spillMaterial = flowMaterial;
                 floorSpill.InitializeComponents();
             }
+
+            // Resolve MoltenMetalStreamParticles (Dense Liquid Stream)
+            if (streamParticles == null)
+            {
+                streamParticles = GetComponentInChildren<MoltenMetalStreamParticles>(true);
+                if (streamParticles == null)
+                {
+                    var spGo = transform.Find("MoltenMetalStreamParticles");
+                    if (spGo != null) streamParticles = spGo.GetComponent<MoltenMetalStreamParticles>();
+                }
+            }
+
+            if (streamParticles != null)
+            {
+                if (streamParticles.drop == null && dropPoint != null) streamParticles.drop = dropPoint;
+                if (streamParticles.drop1 == null && dropPoint1 != null) streamParticles.drop1 = dropPoint1;
+                if (streamParticles.drop2 == null && dropPoint2 != null) streamParticles.drop2 = dropPoint2;
+                streamParticles.InitializeComponents();
+            }
+
+            // Resolve MoltenMetalSmoke
+            if (moltenLeakageSmoke == null)
+            {
+                var smokeChild = transform.Find("MoltenMetalSmoke");
+                if (smokeChild != null) moltenLeakageSmoke = smokeChild.GetComponent<ParticleSystem>();
+            }
         }
 
         /// <summary>
@@ -236,32 +304,48 @@ namespace PotLeakage.VFX
         /// </summary>
         public void PlayMoltenMetalOverflow()
         {
+            if (!gameObject.activeSelf)
+            {
+                gameObject.SetActive(true);
+            }
             InitializeTargets();
 
-            // Ensure flow mesh exists and is built
+            // Large mesh tube disabled per specification: replaced by dense liquid particle stream
             if (flowMesh != null)
             {
-                var mf = flowMesh.GetComponent<MeshFilter>();
-                if (mf == null || mf.sharedMesh == null || mf.sharedMesh.vertexCount == 0)
-                {
-                    flowMesh.BuildStreamMesh();
-                }
-
                 flowMesh.gameObject.SetActive(true);
             }
 
             if (flowMeshRenderer != null)
             {
-                flowMeshRenderer.enabled = true;
+                flowMeshRenderer.enabled = false;
             }
 
-            // Play secondary droplets if present
+            // Start dense liquid particle stream
+            if (streamParticles != null)
+            {
+                streamParticles.gameObject.SetActive(true);
+                streamParticles.PlayStream();
+            }
+
+            // Start subtle molten smoke rising from the leakage area
+            if (moltenLeakageSmoke != null)
+            {
+                moltenLeakageSmoke.gameObject.SetActive(true);
+                var em = moltenLeakageSmoke.emission;
+                em.enabled = true;
+                em.rateOverTime = 14f;
+                if (!moltenLeakageSmoke.isPlaying) moltenLeakageSmoke.Play();
+            }
+
+            // Secondary droplets strictly disabled per specification
             if (moltenMetalDroplets != null)
             {
-                moltenMetalDroplets.gameObject.SetActive(true);
                 moltenMetalDroplets.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                 moltenMetalDroplets.Clear(true);
-                moltenMetalDroplets.Play(true);
+                var emission = moltenMetalDroplets.emission;
+                emission.enabled = false;
+                moltenMetalDroplets.gameObject.SetActive(false);
             }
 
             // Apply exact molten-metal flow material to Cube.010
@@ -339,6 +423,18 @@ namespace PotLeakage.VFX
                 flowMeshRenderer.enabled = false;
             }
 
+            if (streamParticles != null)
+            {
+                streamParticles.StopStream();
+            }
+
+            if (moltenLeakageSmoke != null)
+            {
+                moltenLeakageSmoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                moltenLeakageSmoke.Clear(true);
+                moltenLeakageSmoke.gameObject.SetActive(false);
+            }
+
             if (moltenMetalDroplets != null)
             {
                 moltenMetalDroplets.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -410,12 +506,32 @@ namespace PotLeakage.VFX
                 flowMesh.SetControlled(controlled, duration);
             }
 
+            if (flowMeshRenderer != null)
+            {
+                flowMeshRenderer.enabled = false;
+            }
+
+            if (streamParticles != null)
+            {
+                streamParticles.SetControlled(controlled, duration);
+            }
+
+            if (moltenLeakageSmoke != null)
+            {
+                moltenLeakageSmoke.gameObject.SetActive(true);
+                var em = moltenLeakageSmoke.emission;
+                em.enabled = true;
+                em.rateOverTime = controlled ? 22f : 14f; // subtle increase in smoke when stopper is placed
+                if (!moltenLeakageSmoke.isPlaying) moltenLeakageSmoke.Play();
+            }
+
             if (moltenMetalDroplets != null)
             {
+                moltenMetalDroplets.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                moltenMetalDroplets.Clear(true);
                 var emission = moltenMetalDroplets.emission;
-                emission.rateOverTime = controlled ? 3f : emissionRate;
-                var main = moltenMetalDroplets.main;
-                main.startSize = controlled ? 0.025f : particleSize;
+                emission.enabled = false;
+                moltenMetalDroplets.gameObject.SetActive(false);
             }
 
             if (controlled && floorSpill != null)
@@ -433,11 +549,6 @@ namespace PotLeakage.VFX
 
         public void ResetPosition()
         {
-            // Cube.010 is ALWAYS preserved at PathStart
-            if (cube010 != null)
-            {
-                cube010.transform.position = PathStart;
-            }
             RestoreCube010Material();
             ResetFloorSpill();
             SetControlledLeakage(false, 0f);

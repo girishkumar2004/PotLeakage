@@ -8,6 +8,9 @@ namespace PotLeakage.VFX
     public class MoltenMetalFlowMesh : MonoBehaviour
     {
         [Header("Transforms (Read-Only References)")]
+        public Transform drop;
+        public Transform drop1;
+        public Transform drop2;
         public Transform sourceTransform;
         public Transform dropTransform;
 
@@ -19,19 +22,26 @@ namespace PotLeakage.VFX
         public float vTiling = 3.5f;
         public bool reverseUVDirection = false;
 
-        [Header("Controlled Leakage Stream (Visual Setting)")]
-        [Tooltip("Default wide flow tube radius (meters)")]
-        public float defaultRadius = 0.055f;
+        [Header("Stream Taper Settings")]
+        [Tooltip("Radius at stream source / 0% distance (meters)")]
+        public float startRadius = 0.082f;
 
-        [Tooltip("Thinned controlled flow tube radius (meters) — visual parameter")]
-        public float controlledRadius = 0.016f;
+        [Tooltip("Radius at downstream end / 100% distance (meters)")]
+        public float endRadius = 0.018f;
+
+        [Header("Controlled Leakage Stream (Visual Setting)")]
+        [Tooltip("Default wide flow tube radius at source (meters)")]
+        public float defaultRadius = 0.082f;
+
+        [Tooltip("Thinned controlled flow tube radius at source (meters) — visual parameter")]
+        public float controlledRadius = 0.035f;
 
         [Tooltip("Whether the flow is currently in controlled leakage mode")]
         public bool isControlledLeakage = false;
 
         private Coroutine transitionCoroutine;
 
-        // Authoritative Design Coordinates
+        // Authoritative Design Coordinates (Kept for backward compatibility)
         public static readonly Vector3 P0_Source = new Vector3(-4.32000017f, 0.262073308f, -68.1200027f);
         public static readonly Vector3 P1_Rise = new Vector3(-4.32000017f, 0.633f, -68.1200027f);
         public static readonly Vector3 P2_Curve1 = new Vector3(-4.20f, 0.633f, -67.95f);
@@ -92,14 +102,46 @@ namespace PotLeakage.VFX
         private void Awake()
         {
             InitializeComponents();
+            ResolveDropTransforms();
         }
 
         private void OnEnable()
         {
             InitializeComponents();
-            if (generatedMesh == null || generatedMesh.vertexCount == 0)
+            ResolveDropTransforms();
+            BuildStreamMesh();
+        }
+
+        public void ResolveDropTransforms()
+        {
+            if (drop == null)
             {
-                BuildStreamMesh();
+                if (dropTransform != null) drop = dropTransform;
+                else
+                {
+                    var d0 = GameObject.Find("CameraSystem/TransformPoints/drop")
+                          ?? GameObject.Find("TransformPoints/drop")
+                          ?? GameObject.Find("drop");
+                    if (d0 != null) drop = d0.transform;
+                }
+            }
+            if (drop1 == null)
+            {
+                var d1 = GameObject.Find("CameraSystem/TransformPoints/drop (1)")
+                      ?? GameObject.Find("TransformPoints/drop (1)")
+                      ?? GameObject.Find("drop (1)");
+                if (d1 != null) drop1 = d1.transform;
+            }
+            if (drop2 == null)
+            {
+                var d2 = GameObject.Find("CameraSystem/TransformPoints/drop (2)")
+                      ?? GameObject.Find("TransformPoints/drop (2)")
+                      ?? GameObject.Find("drop (2)");
+                if (d2 != null) drop2 = d2.transform;
+            }
+            if (dropTransform == null && drop != null)
+            {
+                dropTransform = drop;
             }
         }
 
@@ -112,31 +154,28 @@ namespace PotLeakage.VFX
             {
                 meshRenderer.sharedMaterial = flowMaterial;
             }
+
+            // Per specification: large solid tube mesh is replaced by dense liquid particle stream
+            if (meshRenderer != null)
+            {
+                meshRenderer.enabled = false;
+            }
         }
 
         /// <summary>
-        /// Generates ONE continuous, organic tube mesh connecting P0 through P8 using Centripetal Catmull-Rom.
+        /// Generates ONE continuous, organic tube mesh connecting drop -> drop (1) -> drop (2) using Centripetal Catmull-Rom.
         /// </summary>
         public void BuildStreamMesh()
         {
             InitializeComponents();
+            ResolveDropTransforms();
 
-            // Read source and destination positions if transforms assigned
-            Vector3 p0 = sourceTransform != null ? sourceTransform.position : P0_Source;
-            Vector3 p8 = dropTransform != null ? dropTransform.position : P8_DropTarget;
+            // Authoritative path strictly uses runtime positions of drop -> drop (1) -> drop (2)
+            Vector3 p0 = drop != null ? drop.position : (dropTransform != null ? dropTransform.position : transform.position);
+            Vector3 p1 = drop1 != null ? drop1.position : p0 + Vector3.forward * 0.3f;
+            Vector3 p2 = drop2 != null ? drop2.position : p1 + Vector3.down * 0.2f;
 
-            Vector3[] controlPoints = new Vector3[]
-            {
-                p0,
-                P1_Rise,
-                P2_Curve1,
-                P3_Curve2,
-                P4_Curve3,
-                P5_Crest,
-                P6_Drop1,
-                P7_Drop2,
-                p8
-            };
+            Vector3[] controlPoints = new Vector3[] { p0, p1, p2 };
 
             int ringCount = Mathf.Max(longitudinalSegments + 1, 10);
             int radialCount = Mathf.Max(radialSegments, 6);
@@ -205,8 +244,9 @@ namespace PotLeakage.VFX
             }
 
             // Generate vertices, normals, UVs
+            // Total vertices = tube rings + 1 bottom rounded tip cap vertex
             int vertsPerRing = radialCount + 1; // duplicate first vertex for seamless UV seam
-            int totalVerts = ringCount * vertsPerRing;
+            int totalVerts = ringCount * vertsPerRing + 1;
             Vector3[] vertices = new Vector3[totalVerts];
             Vector3[] vertexNormals = new Vector3[totalVerts];
             Vector4[] vertexTangents = new Vector4[totalVerts];
@@ -224,6 +264,10 @@ namespace PotLeakage.VFX
             // Transform world coordinates to local space of this GameObject
             Matrix4x4 worldToLocal = transform.worldToLocalMatrix;
 
+            float effStartRadius = isControlledLeakage ? controlledRadius : (startRadius > 0.005f ? startRadius : defaultRadius);
+            float baseStart = startRadius > 0.005f ? startRadius : 0.082f;
+            float effEndRadius = isControlledLeakage ? (controlledRadius * (endRadius / baseStart)) : (endRadius > 0.002f ? endRadius : 0.018f);
+
             for (int r = 0; r < ringCount; r++)
             {
                 Vector3 centerWorld = centerline[r];
@@ -233,36 +277,17 @@ namespace PotLeakage.VFX
 
                 float progress = totalLength > 0.0001f ? (cumLengths[r] / totalLength) : ((float)r / (ringCount - 1));
 
-                // Organic radius profile:
-                // Start (Source): ~0.050m
-                // Upper horizontal flow: ~0.065m
-                // Vertical descent: ~0.045m
-                // Termination: ~0.060m
-                float rScale = 1.0f;
+                // Smooth organic thick-to-thin stream taper along normalized cumulative distance (0.0 to 1.0)
+                // Conceptual profile: 0% = thick, 20% = thick, 40% = medium, 60% = medium-thin, 80% = thin, 100% = thinnest
+                float smoothT = Mathf.SmoothStep(0f, 1f, progress);
+                float ringRadius = Mathf.Lerp(effStartRadius, effEndRadius, smoothT);
+
+                // Source flare where molten metal spills from the pot aperture (0% - 15%)
                 if (progress < 0.15f)
                 {
-                    // Rise from source (0.050 -> 0.065)
-                    rScale = Mathf.Lerp(0.91f, 1.18f, progress / 0.15f);
+                    float tSrc = progress / 0.15f;
+                    ringRadius *= Mathf.Lerp(1.15f, 1.0f, Mathf.SmoothStep(0f, 1f, tSrc));
                 }
-                else if (progress < 0.65f)
-                {
-                    // Upper channel: wide molten stream
-                    rScale = 1.18f;
-                }
-                else if (progress < 0.90f)
-                {
-                    // Vertical descent: stretch/necking (0.065 -> 0.045)
-                    float tFall = (progress - 0.65f) / 0.25f;
-                    rScale = Mathf.Lerp(1.18f, 0.82f, tFall);
-                }
-                else
-                {
-                    // Contact pool flare (0.045 -> 0.060)
-                    float tEnd = (progress - 0.90f) / 0.10f;
-                    rScale = Mathf.Lerp(0.82f, 1.09f, tEnd);
-                }
-
-                float currentRadius = radius * rScale;
 
                 float vCoord = reverseUVDirection ? (1f - progress) * vTiling : progress * vTiling;
 
@@ -273,6 +298,11 @@ namespace PotLeakage.VFX
 
                     float cosA = Mathf.Cos(angle);
                     float sinA = Mathf.Sin(angle);
+
+                    // Fluid organic cross-section: subtle oval/lobe and natural fluid surface modulation
+                    float lobe = 1.0f + 0.035f * Mathf.Cos(angle * 2f);
+                    float wave = 1.0f + 0.02f * Mathf.Sin(progress * 12f + angle);
+                    float currentRadius = ringRadius * lobe * wave;
 
                     Vector3 radialDirWorld = (cosA * norm + sinA * binorm).normalized;
                     Vector3 vertPosWorld = centerWorld + radialDirWorld * currentRadius;
@@ -289,9 +319,20 @@ namespace PotLeakage.VFX
                 }
             }
 
-            // Generate triangles
+            // Bottom rounded tip cap vertex closing the end of the falling stream
+            int capVertIdx = ringCount * vertsPerRing;
+            Vector3 lastCenterWorld = centerline[ringCount - 1];
+            Vector3 lastTanWorld = tangents[ringCount - 1];
+            Vector3 capCenterWorld = lastCenterWorld + lastTanWorld * (effEndRadius * 0.4f);
+
+            vertices[capVertIdx] = worldToLocal.MultiplyPoint3x4(capCenterWorld);
+            vertexNormals[capVertIdx] = worldToLocal.MultiplyVector(lastTanWorld).normalized;
+            vertexTangents[capVertIdx] = new Vector4(lastTanWorld.x, lastTanWorld.y, lastTanWorld.z, 1.0f);
+            uvs[capVertIdx] = new Vector2(0.5f, reverseUVDirection ? 0f : vTiling);
+
+            // Generate triangles (quads + bottom cap fan)
             int quadCount = (ringCount - 1) * radialCount;
-            int[] triangles = new int[quadCount * 6];
+            int[] triangles = new int[(quadCount + radialCount) * 6];
             int triIdx = 0;
 
             for (int r = 0; r < ringCount - 1; r++)
@@ -316,6 +357,15 @@ namespace PotLeakage.VFX
                 }
             }
 
+            // Bottom rounded end cap triangles closing the falling stream tip
+            int lastRingBase = (ringCount - 1) * vertsPerRing;
+            for (int s = 0; s < radialCount; s++)
+            {
+                triangles[triIdx++] = capVertIdx;
+                triangles[triIdx++] = lastRingBase + s;
+                triangles[triIdx++] = lastRingBase + s + 1;
+            }
+
             if (generatedMesh == null)
             {
                 generatedMesh = new Mesh();
@@ -335,11 +385,29 @@ namespace PotLeakage.VFX
 
             if (meshFilter != null)
             {
-                meshFilter.sharedMesh = generatedMesh;
+                // Mesh output cleared per specification: replaced by MoltenMetalStreamParticles
+                meshFilter.sharedMesh = null;
             }
-            if (meshRenderer != null && flowMaterial != null)
+            if (meshRenderer != null)
             {
-                meshRenderer.sharedMaterial = flowMaterial;
+                if (flowMaterial != null) meshRenderer.sharedMaterial = flowMaterial;
+                meshRenderer.enabled = false;
+            }
+        }
+
+        private void Update()
+        {
+            if (meshRenderer != null && meshRenderer.enabled)
+            {
+                meshRenderer.enabled = false;
+            }
+        }
+
+        private void LateUpdate()
+        {
+            if (meshRenderer != null && meshRenderer.enabled)
+            {
+                meshRenderer.enabled = false;
             }
         }
 
@@ -380,11 +448,6 @@ namespace PotLeakage.VFX
                     Vector3 b2 = (t3 - globalT) / (t3 - t1) * a2 + (globalT - t1) / (t3 - t1) * a3;
 
                     Vector3 c = (t2 - globalT) / (t2 - t1) * b1 + (globalT - t1) / (t2 - t1) * b2;
-
-                    // Clamp to strictly prevent overshoot beyond control points bounds
-                    c.x = Mathf.Clamp(c.x, -4.32000017f, -3.76804996f);
-                    c.y = Mathf.Clamp(c.y, -0.156000003f, 0.633f);
-                    c.z = Mathf.Clamp(c.z, -68.1200027f, -67.387001f);
 
                     result.Add(c);
                 }

@@ -109,6 +109,7 @@ namespace PotLeakage.Editor
             {
                 machine = (GameObject)PrefabUtility.InstantiatePrefab(machineModelPrefab);
                 machine.name = "Machine";
+                PrefabUtility.UnpackPrefabInstance(machine, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
                 machine.transform.localPosition = Vector3.zero;
                 machine.transform.localRotation = Quaternion.identity;
                 machine.transform.localScale = Vector3.one;
@@ -691,83 +692,296 @@ namespace PotLeakage.Editor
             // Wire Next Button to SequenceHelperFunctions.CompleteCurrentTask
             UnityEventTools.AddPersistentListener(nextBtn.onClick, new UnityAction(seqHelper.CompleteCurrentTask));
 
-            // ── 8. SEQUENCE TASKS (01 to 04) ─────────────────────────
+            // ── 8. SEQUENCE TASKS (01 to 07 — Side Shell Leakage Upper Location) ───
+            sequence.TaskList.Clear();
+
             // TASK 01: Welcome
             var task01 = new Task
             {
                 TaskName = "01 – Welcome",
                 typeOfInteraction = Task.TypeOfInteraction.None,
-                instructionText = "POT LEAKAGE",
+                instructionText = "Welcome to the Vedanta Pot Leakage Training Visualization.",
                 useTTS = false,
                 completionMode = CompletionMode.Manual
             };
             UnityEventTools.AddObjectPersistentListener<Transform>(task01.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), welcomeTarget.transform);
             UnityEventTools.AddPersistentListener(task01.EventsToFollow, new UnityAction(uiController.SetTask01UI));
-            UnityEventTools.AddPersistentListener(task01.EventsToFollow, new UnityAction(seqHelper.ClearAllHighlights));
-            UnityEventTools.AddPersistentListener(task01.EventsToFollow, new UnityAction(vfxController.DisableVFX));
             sequence.TaskList.Add(task01);
 
-            // TASK 02: Normal Pot Operation
+            // TASK 02: Incident Detected — Pot 69
             var task02 = new Task
             {
-                TaskName = "02 – Normal Pot Operation",
+                TaskName = "02 – Incident Detected — Pot 69",
                 typeOfInteraction = Task.TypeOfInteraction.None,
-                instructionText = "This section introduces the normal operating condition of the pot before discussing abnormal conditions such as pot leakage.",
+                instructionText = "Incident Detected: Pot 69 abnormal condition detected.",
                 useTTS = false,
                 completionMode = CompletionMode.Manual
             };
             UnityEventTools.AddObjectPersistentListener<Transform>(task02.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), normalPotOperationTarget.transform);
-            if (potMachineHighlightGo != null)
-            {
-                UnityEventTools.AddObjectPersistentListener<GameObject>(task02.EventsToFollow, new UnityAction<GameObject>(seqHelper.HighlightObject), potMachineHighlightGo);
-            }
             UnityEventTools.AddPersistentListener(task02.EventsToFollow, new UnityAction(uiController.SetTask02UI));
-            UnityEventTools.AddPersistentListener(task02.EventsToFollow, new UnityAction(vfxController.DisableVFX));
             sequence.TaskList.Add(task02);
 
-            // TASK 03: Ideal Pot Voltage
+            // TASK 03: Emergency Communication
             var task03 = new Task
             {
-                TaskName = "03 – Ideal Pot Voltage",
+                TaskName = "03 – Emergency Communication",
                 typeOfInteraction = Task.TypeOfInteraction.None,
-                instructionText = "Pot voltage is continuously monitored to ensure operational stability and cell thermal balance.",
+                instructionText = "Emergency Communication: report leakage to Shift Superintendent and Technical In-charge.",
                 useTTS = false,
                 completionMode = CompletionMode.Manual
             };
-            UnityEventTools.AddObjectPersistentListener<Transform>(task03.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), idealPotVoltageTarget.transform);
-            if (potMachineHighlightGo != null)
-            {
-                UnityEventTools.AddObjectPersistentListener<GameObject>(task03.EventsToFollow, new UnityAction<GameObject>(seqHelper.HighlightObject), potMachineHighlightGo);
-            }
+            UnityEventTools.AddObjectPersistentListener<Transform>(task03.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), idealCBTTemperatureTarget.transform);
             UnityEventTools.AddPersistentListener(task03.EventsToFollow, new UnityAction(uiController.SetTask03UI));
-            UnityEventTools.AddPersistentListener(task03.EventsToFollow, new UnityAction(vfxController.DisableVFX));
             sequence.TaskList.Add(task03);
 
-            // TASK 04: Ideal CBT Temperature
+            // TASK 04: Pot Controller Notification
             var task04 = new Task
             {
-                TaskName = "04 – Ideal CBT Temperature",
+                TaskName = "04 – Pot Controller Notification",
                 typeOfInteraction = Task.TypeOfInteraction.None,
-                instructionText = "Collector Bar Temperature (CBT) is an important parameter used when identifying abnormal pot conditions and possible collector bar leakage.",
+                instructionText = "Pot Controller Notification: emergency announcement broadcast.",
                 useTTS = false,
                 completionMode = CompletionMode.Manual
             };
             UnityEventTools.AddObjectPersistentListener<Transform>(task04.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), idealCBTTemperatureTarget.transform);
-            if (potMachineHighlightGo != null)
-            {
-                UnityEventTools.AddObjectPersistentListener<GameObject>(task04.EventsToFollow, new UnityAction<GameObject>(seqHelper.RemoveHighlight), potMachineHighlightGo);
-            }
-            if (fireGo != null)
-            {
-                UnityEventTools.AddObjectPersistentListener<GameObject>(task04.EventsToFollow, new UnityAction<GameObject>(seqHelper.HighlightObject), fireGo);
-            }
             UnityEventTools.AddPersistentListener(task04.EventsToFollow, new UnityAction(uiController.SetTask04UI));
-            UnityEventTools.AddPersistentListener(task04.EventsToFollow, new UnityAction(vfxController.DisableVFX));
             sequence.TaskList.Add(task04);
+
+            // [FUTURE QUESTION SLOT 1]
+            // Extension point between Task 04 and Task 05
+
+            // TASK 05: Identify Upper Side Shell Leakage
+            var task05 = new Task
+            {
+                TaskName = "05 – Identify Upper Side Shell Leakage",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Identify Upper Side Shell Leakage: narrow continuous molten metal stream escaping.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task05.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), normalPotOperationTarget.transform);
+            UnityEventTools.AddPersistentListener(task05.EventsToFollow, new UnityAction(uiController.SetTask05UI));
+            sequence.TaskList.Add(task05);
+
+            // TASK 06: Upper Side Shell Response
+            var task06 = new Task
+            {
+                TaskName = "06 – Upper Side Shell Response",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Upper Side Shell Response: side breaking, anode removal, crust bath in small pieces and fused alumina.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task06.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), normalPotOperationTarget.transform);
+            UnityEventTools.AddPersistentListener(task06.EventsToFollow, new UnityAction(uiController.SetTask06UI));
+            sequence.TaskList.Add(task06);
+
+            // TASK 07: Partial Leakage Arrest / Cut-Out Planning
+            var task07 = new Task
+            {
+                TaskName = "07 – Partial Leakage Arrest / Cut-Out Planning",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Partial Leakage Arrest: small controlled residual leakage, plan for pot cut-out.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task07.EventsToFollow, new UnityAction<Transform>(cameraController.MoveToTarget), normalPotOperationTarget.transform);
+            UnityEventTools.AddPersistentListener(task07.EventsToFollow, new UnityAction(uiController.SetTask07UI));
+            sequence.TaskList.Add(task07);
+
+            // [FUTURE QUESTION SLOT 2]
+            // Extension point after Task 07
 
             // Save scene
             EditorSceneManager.SaveScene(scene, ScenePath);
             Debug.Log($"[PotLeakageSceneBuilder] Successfully created and saved scene: {ScenePath}");
+        }
+
+        [MenuItem("Vedanta/Configure 7-Task Storyboard Scene")]
+        public static void ConfigureStoryboard7Tasks()
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath);
+            if (!scene.IsValid())
+            {
+                Debug.LogError($"[PotLeakageSceneBuilder] Could not open scene: {ScenePath}");
+                return;
+            }
+
+            var sequence = Object.FindAnyObjectByType<Sequence>();
+            var seqHandler = Object.FindAnyObjectByType<SequenceHandler>();
+            var seqHelper = Object.FindAnyObjectByType<SequenceHelperFunctions>();
+            var potManager = Object.FindAnyObjectByType<PotLeakageManager>();
+            var uiController = Object.FindAnyObjectByType<PotLeakageUIController>();
+            var camController = Object.FindAnyObjectByType<PotLeakageCameraController>();
+
+            if (sequence == null || seqHandler == null || seqHelper == null || uiController == null || camController == null)
+            {
+                Debug.LogError("[PotLeakageSceneBuilder] Essential components missing from scene!");
+                return;
+            }
+
+            var transformPoints = GameObject.Find("TransformPoints") ?? GameObject.Find("CameraSystem/TransformPoints");
+            if (transformPoints == null)
+            {
+                Debug.LogError("[PotLeakageSceneBuilder] TransformPoints not found!");
+                return;
+            }
+
+            var welcomeTarget = transformPoints.transform.Find("Welcome");
+            var normalPotOperationTarget = transformPoints.transform.Find("Normal Pot Operation");
+            var idealPotVoltageTarget = transformPoints.transform.Find("Ideal Pot Voltage");
+            var idealCBTTemperatureTarget = transformPoints.transform.Find("Ideal CBT Temperature");
+
+            // Wire authoritative next button
+            var nextBtnGo = GameObject.Find("UI/Canvas/Welcome Panel/Footer/NextButton");
+            if (nextBtnGo != null)
+            {
+                var nextBtn = nextBtnGo.GetComponent<Button>();
+                if (nextBtn != null)
+                {
+                    while (nextBtn.onClick.GetPersistentEventCount() > 0)
+                    {
+                        UnityEventTools.RemovePersistentListener(nextBtn.onClick, 0);
+                    }
+                    UnityEventTools.AddPersistentListener(nextBtn.onClick, new UnityAction(seqHelper.CompleteCurrentTask));
+                    EditorUtility.SetDirty(nextBtn);
+                }
+            }
+
+            // Wire PotLeakageManager
+            if (potManager != null)
+            {
+                potManager.ResolveReferences();
+                if (potManager.backgroundTrainingAudio == null)
+                {
+                    var audioClip = AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/call.mp3");
+                    if (audioClip != null) potManager.backgroundTrainingAudio = audioClip;
+                }
+                potManager.backgroundAudioVolume = 0.25f;
+                potManager.backgroundAudioLoop = true;
+                EditorUtility.SetDirty(potManager);
+            }
+
+            // Rebuild TaskList with EXACTLY 7 tasks
+            sequence.TaskList = new List<Task>();
+
+            // TASK 01: Welcome
+            var task01 = new Task
+            {
+                TaskName = "01 – Welcome",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Welcome to the Vedanta Pot Leakage Training Visualization.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task01.EventsToFollow, new UnityAction<Transform>(camController.MoveToTarget), welcomeTarget);
+            UnityEventTools.AddPersistentListener(task01.EventsToFollow, new UnityAction(uiController.SetTask01UI));
+            sequence.TaskList.Add(task01);
+
+            // TASK 02: Incident Detected — Pot 69
+            var task02 = new Task
+            {
+                TaskName = "02 – Incident Detected — Pot 69",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Incident Detected: Pot 69 abnormal condition detected.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task02.EventsToFollow, new UnityAction<Transform>(camController.MoveToTarget), normalPotOperationTarget);
+            UnityEventTools.AddPersistentListener(task02.EventsToFollow, new UnityAction(uiController.SetTask02UI));
+            sequence.TaskList.Add(task02);
+
+            // TASK 03: Emergency Communication
+            var task03 = new Task
+            {
+                TaskName = "03 – Emergency Communication",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Emergency Communication: report leakage to Shift Superintendent and Technical In-charge.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task03.EventsToFollow, new UnityAction<Transform>(camController.MoveToTarget), idealCBTTemperatureTarget);
+            UnityEventTools.AddPersistentListener(task03.EventsToFollow, new UnityAction(uiController.SetTask03UI));
+            sequence.TaskList.Add(task03);
+
+            // TASK 04: Pot Controller Notification
+            var task04 = new Task
+            {
+                TaskName = "04 – Pot Controller Notification",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Pot Controller Notification: emergency announcement broadcast.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task04.EventsToFollow, new UnityAction<Transform>(camController.MoveToTarget), idealCBTTemperatureTarget);
+            UnityEventTools.AddPersistentListener(task04.EventsToFollow, new UnityAction(uiController.SetTask04UI));
+            sequence.TaskList.Add(task04);
+
+            // [FUTURE QUESTION SLOT 1]
+
+            // TASK 05: Identify Upper Side Shell Leakage
+            var task05 = new Task
+            {
+                TaskName = "05 – Identify Upper Side Shell Leakage",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Identify Upper Side Shell Leakage: narrow continuous molten metal stream escaping.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task05.EventsToFollow, new UnityAction<Transform>(camController.MoveToTarget), normalPotOperationTarget);
+            UnityEventTools.AddPersistentListener(task05.EventsToFollow, new UnityAction(uiController.SetTask05UI));
+            sequence.TaskList.Add(task05);
+
+            // TASK 06: Upper Side Shell Response
+            var task06 = new Task
+            {
+                TaskName = "06 – Upper Side Shell Response",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Upper Side Shell Response: side breaking, anode removal, crust bath in small pieces and fused alumina.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task06.EventsToFollow, new UnityAction<Transform>(camController.MoveToTarget), normalPotOperationTarget);
+            UnityEventTools.AddPersistentListener(task06.EventsToFollow, new UnityAction(uiController.SetTask06UI));
+            sequence.TaskList.Add(task06);
+
+            // TASK 07: Partial Leakage Arrest / Cut-Out Planning
+            var task07 = new Task
+            {
+                TaskName = "07 – Partial Leakage Arrest / Cut-Out Planning",
+                typeOfInteraction = Task.TypeOfInteraction.None,
+                instructionText = "Partial Leakage Arrest: small controlled residual leakage, plan for pot cut-out.",
+                useTTS = false,
+                completionMode = CompletionMode.Manual
+            };
+            UnityEventTools.AddObjectPersistentListener<Transform>(task07.EventsToFollow, new UnityAction<Transform>(camController.MoveToTarget), normalPotOperationTarget);
+            UnityEventTools.AddPersistentListener(task07.EventsToFollow, new UnityAction(uiController.SetTask07UI));
+            sequence.TaskList.Add(task07);
+
+            // [FUTURE QUESTION SLOT 2]
+
+            var seqSo = new SerializedObject(sequence);
+            var taskListProp = seqSo.FindProperty("TaskList");
+            for (int t = 0; t < taskListProp.arraySize; t++)
+            {
+                var calls = taskListProp.GetArrayElementAtIndex(t).FindPropertyRelative("EventsToFollow.m_PersistentCalls.m_Calls");
+                for (int c = 0; c < calls.arraySize; c++)
+                {
+                    calls.GetArrayElementAtIndex(c).FindPropertyRelative("m_CallState").intValue = (int)UnityEventCallState.EditorAndRuntime;
+                }
+            }
+            seqSo.ApplyModifiedProperties();
+
+            EditorUtility.SetDirty(sequence);
+            if (seqHandler != null)
+            {
+                seqHandler.sequenceList = new List<Sequence> { sequence };
+                EditorUtility.SetDirty(seqHandler);
+            }
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            Debug.Log("[PotLeakageSceneBuilder] Successfully configured and saved 7-task Upper Side Shell Storyboard scene!");
         }
     }
 }

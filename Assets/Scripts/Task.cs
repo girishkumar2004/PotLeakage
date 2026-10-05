@@ -30,4 +30,7 @@ public class Task
     public bool useTTS;
     public AudioClip audioClipOverride;
     public CompletionMode completionMode;
+    public bool AutoAdvanceAfterVoiceOver;
+
+    public bool IsAutoAdvance => AutoAdvanceAfterVoiceOver || completionMode == CompletionMode.AudioComplete;
 }

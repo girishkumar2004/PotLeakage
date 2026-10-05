@@ -24,9 +24,53 @@ public class SequenceHandler : MonoBehaviour
     public bool isSequenceMode;
     public bool lockSequence = false;
 
+    private int currentSpeakingTaskIndex = -1;
+    private int currentSpeakingGeneration = -1;
+    private int taskGeneration = 0;
+    private bool taskCompletionHandled = false;
+
+    private void OnEnable()
+    {
+        TruckTyreReplacement.Core.Manager.OnSpeechCompleted += OnSpeechFinished;
+    }
+
+    private void OnDisable()
+    {
+        TruckTyreReplacement.Core.Manager.OnSpeechCompleted -= OnSpeechFinished;
+    }
+
+    private void OnSpeechFinished(string key, string text)
+    {
+        HandleVoiceOverCompleted(currentSpeakingTaskIndex, currentSpeakingGeneration);
+    }
+
+    public void HandleVoiceOverCompleted(int taskIndex, int generation = -1)
+    {
+        // NO AUTO-ADVANCE: TTS / Voice completion NEVER advances the training sequence.
+        // The ONLY progression mechanism is user clicking Next / Continue or explicit physical interaction.
+        Debug.Log($"[SequenceHandler] Voice-over finished for task {taskIndex}. Progression requires manual Next / Continue click.");
+    }
+
+    public void UpdateContinueButtonVisibility(bool show)
+    {
+        if (SequenceHelperFunctions.instance != null && SequenceHelperFunctions.instance.nextButton != null)
+        {
+            SequenceHelperFunctions.instance.nextButton.gameObject.SetActive(show);
+        }
+        var ui = PotLeakage.UI.PotLeakageUIController.Instance ?? UnityEngine.Object.FindFirstObjectByType<PotLeakage.UI.PotLeakageUIController>();
+        if (ui != null && ui.nextButton != null)
+        {
+            ui.nextButton.gameObject.SetActive(show);
+        }
+    }
+
     public void Awake()
     {
-        if (instance == null || (instance.sequenceList == null || instance.sequenceList.Count == 0))
+        if (autostart)
+        {
+            instance = this;
+        }
+        else if (instance == null || !instance.autostart)
         {
             if (sequenceList != null && sequenceList.Count > 0)
             {
@@ -52,6 +96,27 @@ public class SequenceHandler : MonoBehaviour
     {
         currentSequence = 0;
         currentTask = 0;
+        currentSpeakingTaskIndex = -1;
+        currentSpeakingGeneration = -1;
+        taskGeneration = 0;
+        taskCompletionHandled = false;
+        if (sequenceList != null)
+        {
+            foreach (var seq in sequenceList)
+            {
+                if (seq != null && seq.TaskList != null)
+                {
+                    foreach (var t in seq.TaskList)
+                    {
+                        if (t != null)
+                        {
+                            t.TaskCompleted = false;
+                            t.TriggerCompleted = false;
+                        }
+                    }
+                }
+            }
+        }
         OnSequenceStarted?.Invoke(currentSequence);
         //if (isSequenceMode)
             NextTask();
@@ -68,10 +133,23 @@ public class SequenceHandler : MonoBehaviour
         if (sequenceList[currentSequence].TaskList == null || currentTask < 0 || currentTask >= sequenceList[currentSequence].TaskList.Count)
             return;
 
-        if (sequenceList[currentSequence].TaskList[currentTask].TaskCompleted)
+        if (taskCompletionHandled && sequenceList[currentSequence].TaskList[currentTask].TaskCompleted)
         {
             Debug.LogWarning($"[SequenceHandler] Task {currentTask} is already completed. Rejects duplicate completion call.");
             return;
+        }
+
+        taskCompletionHandled = true;
+        taskGeneration++;
+
+        // Stop current speech playback immediately if advancing early via Next click or other pathway
+        try
+        {
+            TruckTyreReplacement.Core.Manager.Instance?.StopSpeech();
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"[SequenceHandler] Error stopping speech: {ex.Message}");
         }
 
         string completedTaskName = sequenceList[currentSequence].TaskList[currentTask].TaskName;
@@ -161,10 +239,18 @@ public class SequenceHandler : MonoBehaviour
             return;
         }
 
+        taskGeneration++;
+        currentSpeakingTaskIndex = currentTask;
+        currentSpeakingGeneration = taskGeneration;
+        taskCompletionHandled = false;
+
         Task activeTask = sequenceList[currentSequence].TaskList[currentTask];
         activeTask.TaskCompleted = false;
 
-        Debug.Log($"[SEQUENCE START]\nSequence = {currentSequence}\nTask Index = {currentTask}\nTask Name = {activeTask.TaskName}");
+        bool isAuto = activeTask.AutoAdvanceAfterVoiceOver || activeTask.completionMode == CompletionMode.AudioComplete;
+        UpdateContinueButtonVisibility(true);
+
+        Debug.Log($"[SEQUENCE START]\nSequence = {currentSequence}\nTask Index = {currentTask}\nTask Name = {activeTask.TaskName}\nAutoAdvance = {isAuto}");
         Debug.Log($"[PotLeakage] Starting Task {(currentTask + 1):D2} (Index={currentTask}, Name='{activeTask.TaskName}')");
 
         ExecuteTaskInstructionAndTTS(activeTask);
@@ -191,8 +277,16 @@ public class SequenceHandler : MonoBehaviour
         if (currentSequence >= 0 && currentSequence < sequenceList.Count &&
             currentTask >= 0 && currentTask < sequenceList[currentSequence].TaskList.Count)
         {
+            taskGeneration++;
+            currentSpeakingTaskIndex = currentTask;
+            currentSpeakingGeneration = taskGeneration;
+            taskCompletionHandled = false;
+
             Task activeTask = sequenceList[currentSequence].TaskList[currentTask];
             activeTask.TaskCompleted = false;
+
+            bool isAuto = activeTask.AutoAdvanceAfterVoiceOver || activeTask.completionMode == CompletionMode.AudioComplete;
+            UpdateContinueButtonVisibility(true);
 
             Debug.Log($"Playing task {currentTask} in sequence {currentSequence}");
 
@@ -253,40 +347,36 @@ public class SequenceHandler : MonoBehaviour
         // 2. Play LocalTTS Audio
         if (task.useTTS)
         {
+            currentSpeakingTaskIndex = currentTask;
+            currentSpeakingGeneration = taskGeneration;
+            int capturedIndex = currentTask;
+            int capturedGen = taskGeneration;
+
             if (task.audioClipOverride != null)
             {
                 if (SequenceHelperFunctions.instance != null)
                 {
-                    if (task.completionMode == CompletionMode.AudioComplete)
-                        SequenceHelperFunctions.instance.PlayAudio_TriggerOnComplete(task.audioClipOverride);
-                    else
-                        SequenceHelperFunctions.instance.VoiceOverCall(task.audioClipOverride);
+                    SequenceHelperFunctions.instance.PlayVoiceAudioClipWithCallback(task.audioClipOverride, () =>
+                    {
+                        HandleVoiceOverCompleted(capturedIndex, capturedGen);
+                    });
                 }
             }
             else if (!string.IsNullOrEmpty(speechKeyOrText))
             {
-                Debug.Log($"[SequenceHandler][TTS] Task '{task.TaskName}' (Mode: {task.completionMode}) speaking key: '{speechKeyOrText}'");
-                if (SequenceHelperFunctions.instance != null)
+                Debug.Log($"[SequenceHandler][TTS] Task '{task.TaskName}' (AutoAdvance: {task.AutoAdvanceAfterVoiceOver}, Mode: {task.completionMode}) speaking: '{speechKeyOrText}'");
+                if (manager != null)
                 {
-                    if (task.completionMode == CompletionMode.AudioComplete)
-                    {
-                        if (speechKeyOrText == "complete")
-                            SequenceHelperFunctions.instance.PlayCompletionSequence_TriggerOnComplete();
-                        else
-                            SequenceHelperFunctions.instance.PlayLocaleAudio_TriggerOnComplete(speechKeyOrText);
-                    }
-                    else
-                    {
-                        SequenceHelperFunctions.instance.PlayLocaleAudio(speechKeyOrText);
-                    }
+                    manager.SpeakText(speechKeyOrText, speechKeyOrText);
                 }
-                else if (manager != null)
+                else if (SequenceHelperFunctions.instance != null)
                 {
-                    manager.Speak(speechKeyOrText);
+                    SequenceHelperFunctions.instance.PlayLocaleAudio(speechKeyOrText);
                 }
                 else
                 {
                     Debug.LogWarning($"[SequenceHandler][TTS] LocalTTS / Manager unavailable for task '{task.TaskName}'. Continuing without audio.");
+                    HandleVoiceOverCompleted(capturedIndex, capturedGen);
                 }
             }
         }
@@ -306,6 +396,9 @@ public class SequenceHandler : MonoBehaviour
         string toName = sequenceList[currentSequence].SequenceName;
         Debug.Log($"[SEQUENCE ADVANCE]\nFrom = {fromName}\nTo = {toName}");
         currentTask = 0;
+        currentSpeakingTaskIndex = -1;
+        currentSpeakingGeneration = -1;
+        taskCompletionHandled = false;
         OnSequenceStarted?.Invoke(currentSequence);
         NextTask();
     }
@@ -318,6 +411,9 @@ public class SequenceHandler : MonoBehaviour
             return;
         }
         currentTask = 0;
+        currentSpeakingTaskIndex = -1;
+        currentSpeakingGeneration = -1;
+        taskCompletionHandled = false;
         NextTask();
     }
 
@@ -326,6 +422,9 @@ public class SequenceHandler : MonoBehaviour
         if (currentSequence >= 0 && currentSequence < sequenceList.Count)
         {
             currentTask = 0;
+            currentSpeakingTaskIndex = -1;
+            currentSpeakingGeneration = -1;
+            taskCompletionHandled = false;
             Debug.Log("Reload Sequence" + currentSequence);
             PlayCurrentTask();
         }
