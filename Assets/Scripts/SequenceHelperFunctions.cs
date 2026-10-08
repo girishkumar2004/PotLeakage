@@ -12,6 +12,7 @@ using TruckTyreReplacement.Core;
 using PotLeakage.UI;
 using PotLeakage.Camera;
 using PotLeakage.Interaction;
+using PotLeakage.VFX;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ObjectMovementMapping
@@ -156,6 +157,8 @@ public class SequenceHelperFunctions : MonoBehaviour
     private void Awake()
     {
         instance = this;
+        cube051InitialLocalPosition = new Vector3(-6.80000019f, 5.96000004f, -0.389999986f);
+        cube051TargetLocalPosition = new Vector3(-6.80000019f, 1.23000002f, -0.389999986f);
         if (activeHighlightedObjects == null) activeHighlightedObjects = new List<GameObject>();
         if (originalMaterialsDict == null) originalMaterialsDict = new Dictionary<Renderer, Material[]>();
         activeHighlightedObjects.Clear();
@@ -165,6 +168,8 @@ public class SequenceHelperFunctions : MonoBehaviour
     private void OnEnable()
     {
         instance = this;
+        cube051InitialLocalPosition = new Vector3(-6.80000019f, 5.96000004f, -0.389999986f);
+        cube051TargetLocalPosition = new Vector3(-6.80000019f, 1.23000002f, -0.389999986f);
         if (activeHighlightedObjects == null) activeHighlightedObjects = new List<GameObject>();
         if (originalMaterialsDict == null) originalMaterialsDict = new Dictionary<Renderer, Material[]>();
         activeHighlightedObjects.Clear();
@@ -228,6 +233,7 @@ public class SequenceHelperFunctions : MonoBehaviour
     // ─────────────────────────────────────────────────────────────────────────
 
     private int lastCompletedFrame = -1;
+    public static bool disableDebounceForTesting = false;
 
     public void ResetDebounce() => lastCompletedFrame = -1;
 
@@ -237,15 +243,37 @@ public class SequenceHelperFunctions : MonoBehaviour
     /// </summary>
     public static System.Func<bool> OnInterceptTaskCompletion;
 
+    public static int voicePlaybackVersion = 0;
+
+    public void StopAllVoicesAndInvalidate()
+    {
+        voicePlaybackVersion++;
+        if (ptmCraneAnimationCoroutine != null)
+        {
+            if (Application.isPlaying) StopCoroutine(ptmCraneAnimationCoroutine);
+            ptmCraneAnimationCoroutine = null;
+        }
+        TruckTyreReplacement.Core.Manager.Instance?.StopSpeech();
+        if (Voice_Audio != null)
+        {
+            Voice_Audio.Stop();
+            Voice_Audio.clip = null;
+        }
+        Debug.Log($"[SequenceHelperFunctions] StopAllVoicesAndInvalidate: voicePlaybackVersion={voicePlaybackVersion}");
+    }
+
     /// <summary>Complete the current task. Wire from OnCompleted, OnTargetReached, OnGrabbed, etc.</summary>
     public void CompleteCurrentTask()
     {
-        if (Application.isPlaying && Time.frameCount == lastCompletedFrame && Time.frameCount > 0)
+        if (!disableDebounceForTesting && Application.isPlaying && Time.frameCount == lastCompletedFrame && Time.frameCount > 0)
         {
             Debug.LogWarning($"[SequenceHelperFunctions] Debounce: CompleteCurrentTask already called in frame {Time.frameCount}. Ignoring duplicate.");
             return;
         }
         lastCompletedFrame = Time.frameCount;
+
+        // STOP CURRENT VOICE IMMEDIATELY & INVALIDATE PREVIOUS CALLBACKS
+        StopAllVoicesAndInvalidate();
 
         ResolveHandler();
         if (handler != null)
@@ -512,11 +540,11 @@ public class SequenceHelperFunctions : MonoBehaviour
                 ui.valueDisplay.HideValueDisplay();
             }
 
-            ui.SpeakDescriptionText(desc, "TASK_05_POT_CONTROL_OBSERVATION");
+            ui.SpeakDescriptionText(desc, "TASK_05_POT_CONTROL_OBSERVATION", "Technical_Mark");
         }
         else
         {
-            Manager.Instance?.SpeakText(desc, "TASK_05_POT_CONTROL_OBSERVATION");
+            Manager.Instance?.SpeakText(desc, "TASK_05_POT_CONTROL_OBSERVATION", "Technical_Mark");
         }
 
         Debug.Log("[PotLeakage] Stage 1: Pot Control Observation active. ActiveDigits blinking = OFF, Voltage = 4.544 V.");
@@ -659,11 +687,11 @@ public class SequenceHelperFunctions : MonoBehaviour
                 ui.valueDisplay.HideValueDisplay();
             }
 
-            ui.SpeakDescriptionText(desc, "TASK_07_BEAM_SCALE_VERIFICATION");
+            ui.SpeakDescriptionText(desc, "TASK_07_BEAM_SCALE_VERIFICATION", "Technical_Mark");
         }
         else
         {
-            Manager.Instance?.SpeakText(desc, "TASK_07_BEAM_SCALE_VERIFICATION");
+            Manager.Instance?.SpeakText(desc, "TASK_07_BEAM_SCALE_VERIFICATION", "Technical_Mark");
         }
 
         Debug.Log("[PotLeakage] Stage 3: Beam Scale Verification active. Camera snapped to PotInspection.");
@@ -767,7 +795,7 @@ public class SequenceHelperFunctions : MonoBehaviour
         var ui = ResolvePotLeakageUI();
         if (!isAnodeDownInteractable && (ui == null || !ui.isAnodeDownInteractable)) return;
 
-        if (Application.isPlaying && ((Time.frameCount == lastAnodeDownClickFrame && Time.frameCount > 0) || (Time.time - lastAnodeDownClickTime < 0.15f))) return;
+        if (!disableDebounceForTesting && Application.isPlaying && ((Time.frameCount == lastAnodeDownClickFrame && Time.frameCount > 0) || (Time.time - lastAnodeDownClickTime < 0.15f))) return;
         lastAnodeDownClickFrame = Time.frameCount;
         lastAnodeDownClickTime = Time.time;
 
@@ -843,11 +871,11 @@ public class SequenceHelperFunctions : MonoBehaviour
             }
             if (ui.nextButton != null) ui.nextButton.gameObject.SetActive(true);
 
-            ui.SpeakDescriptionText(safeMsg, "TASK_08_SAFE_VOLTAGE");
+            ui.SpeakDescriptionText(safeMsg, "TASK_08_SAFE_VOLTAGE", "Technical_Mark");
         }
         else
         {
-            Manager.Instance?.SpeakText(safeMsg, "TASK_08_SAFE_VOLTAGE");
+            Manager.Instance?.SpeakText(safeMsg, "TASK_08_SAFE_VOLTAGE", "Technical_Mark");
         }
 
         Debug.Log("[PotLeakage] Voltage appropriate message displayed (4.144 V reached). Awaiting manual Next click.");
@@ -876,6 +904,19 @@ public class SequenceHelperFunctions : MonoBehaviour
     public GameObject sideBreakingTool6Target;
     public bool isStopperToolInteractable = false;
     public bool isStopperToolConfirmed = false;
+
+    [Header("Side Breaking Tool (5) & PIPES Highlight State")]
+    public bool isSideBreakingTool5Interactable = false;
+    public bool hasClickedSideBreakingTool5 = false;
+    public bool isPipesHighlightInteractable = false;
+    public bool hasClickedPipesHighlight = false;
+    public GameObject pipesHighlightTarget;
+    [Tooltip("SFX played once when SIDEREAKING TOOL (5) is enabled (thud.mp3)")]
+    public AudioClip thudAudioClip;
+    private Coroutine sideBreakingTool5BlinkCoroutine;
+    private Coroutine pipesHighlightBlinkCoroutine;
+    private readonly List<RendererSlotHighlight> sideBreakingTool5HighlightSlots = new List<RendererSlotHighlight>();
+    private readonly List<RendererSlotHighlight> pipesHighlightSlots = new List<RendererSlotHighlight>();
 
     public GameObject walkieCommunicationCanvasTarget;
     private Material yellowHighlightMaterial;
@@ -1009,19 +1050,11 @@ public class SequenceHelperFunctions : MonoBehaviour
 
         if (glovesTarget != null)
         {
-            if (glovesOriginalMaterials.Count == 0)
-            {
-                CacheGlovesOriginalMaterials();
-            }
-
+            glovesTarget.SetActive(false);
             var col = glovesTarget.GetComponent<Collider>();
-            if (col == null) col = glovesTarget.AddComponent<BoxCollider>();
-            col.enabled = true;
-
+            if (col != null) col.enabled = false;
             var interaction = glovesTarget.GetComponent<SideBreakingToolInteraction>();
-            if (interaction == null) interaction = glovesTarget.AddComponent<SideBreakingToolInteraction>();
-            interaction.role = SideBreakingToolInteraction.ToolRole.Gloves;
-            interaction.uiController = ResolvePotLeakageUI();
+            if (interaction != null) interaction.enabled = false;
         }
 
         return glovesTarget;
@@ -1124,7 +1157,7 @@ public class SequenceHelperFunctions : MonoBehaviour
 
             var interaction = sideBreakingTool5Target.GetComponent<SideBreakingToolInteraction>();
             if (interaction == null) interaction = sideBreakingTool5Target.AddComponent<SideBreakingToolInteraction>();
-            interaction.role = SideBreakingToolInteraction.ToolRole.StopperTool;
+            interaction.role = SideBreakingToolInteraction.ToolRole.SideBreakingTool5;
             interaction.uiController = ResolvePotLeakageUI();
         }
 
@@ -1184,8 +1217,48 @@ public class SequenceHelperFunctions : MonoBehaviour
         return sideBreakingTool6Target;
     }
 
+    public GameObject ResolvePipesHighlightTarget()
+    {
+        if (pipesHighlightTarget == null)
+        {
+            var p = GameObject.Find("PIPES Highlight");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "PIPES Highlight" && !IsPersistentObject(g))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            pipesHighlightTarget = p;
+        }
+
+        if (pipesHighlightTarget != null)
+        {
+            var col = pipesHighlightTarget.GetComponent<BoxCollider>();
+            if (col == null)
+            {
+                col = pipesHighlightTarget.AddComponent<BoxCollider>();
+                col.center = new Vector3(-0.01f, 0.05f, 0.09f);
+                col.size = new Vector3(0.55f, 0.35f, 1.25f);
+            }
+            col.enabled = true;
+
+            var interaction = pipesHighlightTarget.GetComponent<SideBreakingToolInteraction>();
+            if (interaction == null) interaction = pipesHighlightTarget.AddComponent<SideBreakingToolInteraction>();
+            interaction.role = SideBreakingToolInteraction.ToolRole.PipesHighlight;
+            interaction.uiController = ResolvePotLeakageUI();
+        }
+
+        return pipesHighlightTarget;
+    }
+
     /// <summary>
-    /// Safety reset for tools (4), (5), and (6).
+    /// Safety reset for tools (4), (5), and (6), and PIPES Highlight.
     /// Guarantees that neither tool remains active during opening stages (Welcome, Normal Pot Operation,
     /// Normal Pot / Leakage, Pot Control Machine, Verify Beam Level) or from previous test runs.
     /// Does NOT touch SIDEREAKING TOOL (1), (2), or (3).
@@ -1195,16 +1268,627 @@ public class SequenceHelperFunctions : MonoBehaviour
         var s4 = ResolveSideBreakingTool4();
         if (s4 != null) s4.SetActive(false);
 
+        StopSideBreakingTool5Blink();
         var s5 = ResolveSideBreakingTool5();
-        if (s5 != null) s5.SetActive(false);
+        if (s5 != null)
+        {
+            RestoreSideBreakingTool5OriginalMaterials();
+            s5.SetActive(false);
+        }
 
         var s6 = ResolveSideBreakingTool6();
         if (s6 != null) s6.SetActive(false);
 
+        var pipesH = ResolvePipesHighlightTarget();
+        if (pipesH != null) pipesH.SetActive(false);
+        StopPipesHighlightBlink();
+
         isStopperToolInteractable = false;
         isStopperToolConfirmed = false;
+        isSideBreakingTool5Interactable = false;
+        hasClickedSideBreakingTool5 = false;
+        isPipesHighlightInteractable = false;
+        hasClickedPipesHighlight = false;
+
+        var g = ResolveGlovesTarget();
+        if (g != null) g.SetActive(false);
+        isGlovesInteractable = false;
+        isGlovesConfirmed = true;
 
         RestoreMoltenLeakageVFX();
+        DeactivateCoolingPipes();
+        DeactivatePipes1();
+        ResetPTMCraneState();
+    }
+
+    private GameObject pipes1Target;
+    public GameObject ResolvePipes1Target()
+    {
+        if (pipes1Target == null)
+        {
+            var p = GameObject.Find("PIPES (1)");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "PIPES (1)" && !IsPersistentObject(g))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            pipes1Target = p;
+        }
+        return pipes1Target;
+    }
+
+    public void ActivatePipes1()
+    {
+        var p = ResolvePipes1Target();
+        if (p != null)
+        {
+            p.SetActive(true);
+            var ctrl = p.GetComponent<PotLeakage.VFX.CoolingPipesController>();
+            if (ctrl != null)
+            {
+                ctrl.ActivateCoolingPipes();
+            }
+            var psList = p.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var ps in psList)
+            {
+                if (ps != null)
+                {
+                    if (!ps.gameObject.activeSelf) ps.gameObject.SetActive(true);
+                    if (!ps.isPlaying) ps.Play(true);
+                }
+            }
+            Debug.Log("[SequenceHelperFunctions] PIPES (1) activated and ParticleSystem(s) playing.");
+        }
+    }
+
+    public void DeactivatePipes1()
+    {
+        var p = ResolvePipes1Target();
+        if (p != null)
+        {
+            var ctrl = p.GetComponent<PotLeakage.VFX.CoolingPipesController>();
+            if (ctrl != null)
+            {
+                ctrl.DeactivateCoolingPipes();
+            }
+            else
+            {
+                var psList = p.GetComponentsInChildren<ParticleSystem>(true);
+                foreach (var ps in psList)
+                {
+                    if (ps != null && ps.isPlaying) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                }
+                p.SetActive(false);
+            }
+        }
+    }
+
+    private GameObject pipes2Target;
+    public GameObject ResolvePipes2Target()
+    {
+        if (pipes2Target == null)
+        {
+            var p = GameObject.Find("PIPES (2)");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "PIPES (2)" && !IsPersistentObject(g))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            pipes2Target = p;
+        }
+        if (pipes2Target != null)
+        {
+            var p2Hi = pipes2Target.GetComponent<PotLeakage.Interaction.Pipes2Interaction>();
+            if (p2Hi == null) p2Hi = pipes2Target.AddComponent<PotLeakage.Interaction.Pipes2Interaction>();
+        }
+        return pipes2Target;
+    }
+
+
+    public GameObject cube051Target;
+    public Vector3 cube051InitialLocalPosition = new Vector3(-6.80000019f, 5.96000004f, -0.389999986f);
+    public Vector3 cube051TargetLocalPosition = new Vector3(-6.80000019f, 1.23000002f, -0.389999986f);
+
+    public GameObject ResolveCube051Target()
+    {
+        if (cube051Target == null)
+        {
+            var c = GameObject.Find("Cube.051");
+            if (c == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "Cube.051" && !IsPersistentObject(g))
+                    {
+                        c = g;
+                        break;
+                    }
+                }
+            }
+            cube051Target = c;
+        }
+        return cube051Target;
+    }
+
+    public Vector3 plane058ClosedLocalPosition = new Vector3(-6.11000013f, 1.21775293f, -76.3903198f);
+    public Vector3 plane058OpenLocalPosition   = new Vector3(-5.19199991f, 1.21775293f, -76.3903198f);
+    public Vector3 plane057ClosedLocalPosition = new Vector3(-6.92999983f, 1.21775293f, -76.3903198f);
+    public Vector3 plane057OpenLocalPosition   = new Vector3(-7.81400013f, 1.21775293f, -76.3903198f);
+
+    public Vector3 plane058FinalCloseStartLocalPosition  = new Vector3(-6.08199978f, 1.21775293f, -76.3903198f);
+    public Vector3 plane058FinalCloseTargetLocalPosition = new Vector3(-6.07700014f, 1.21775293f, -76.3903198f);
+    public Vector3 plane057FinalCloseStartLocalPosition  = new Vector3(-6.92999983f, 1.21775293f, -76.3903198f);
+    public Vector3 plane057FinalCloseTargetLocalPosition = new Vector3(-6.90399981f, 1.21775293f, -76.3903198f);
+
+    public int task03SubStage = 0;
+    public bool isHoodRemovalCompleted = false;
+    public bool isFinalHoodClosingCompleted = false;
+
+    private GameObject plane057Target;
+    public GameObject ResolvePlane057Target()
+    {
+        if (plane057Target == null)
+        {
+            var p = GameObject.Find("LINE/line (6)/Plane.057") ?? GameObject.Find("line (6)/Plane.057");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "Plane.057" && g.transform.parent != null && g.transform.parent.name.Contains("(6)"))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            plane057Target = p;
+        }
+        return plane057Target;
+    }
+
+    private GameObject plane058Target;
+    public GameObject ResolvePlane058Target()
+    {
+        if (plane058Target == null)
+        {
+            var p = GameObject.Find("LINE/line (6)/Plane.058") ?? GameObject.Find("line (6)/Plane.058");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "Plane.058" && g.transform.parent != null && g.transform.parent.name.Contains("(6)"))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            plane058Target = p;
+        }
+        return plane058Target;
+    }
+
+    public PotLeakage.Interaction.HoodPanelInteraction ResolvePlane057Interaction()
+    {
+        var p57 = ResolvePlane057Target();
+        if (p57 == null) return null;
+        var hi = p57.GetComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+        if (hi == null) hi = p57.AddComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+        hi.InitializeComponents();
+        return hi;
+    }
+
+    public PotLeakage.Interaction.HoodPanelInteraction ResolvePlane058Interaction()
+    {
+        var p58 = ResolvePlane058Target();
+        if (p58 == null) return null;
+        var hi = p58.GetComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+        if (hi == null) hi = p58.AddComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+        hi.InitializeComponents();
+        return hi;
+    }
+
+    public void EnsureHoodPanelsOpen()
+    {
+        var p58 = ResolvePlane058Target();
+        if (p58 != null)
+        {
+            var hi58 = p58.GetComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+            if (hi58 != null)
+            {
+                hi58.RestoreOriginalMaterial();
+                hi58.SetHighlight(false);
+            }
+            p58.transform.localPosition = plane058OpenLocalPosition;
+        }
+
+        var p57 = ResolvePlane057Target();
+        if (p57 != null)
+        {
+            var hi57 = p57.GetComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+            if (hi57 != null)
+            {
+                hi57.RestoreOriginalMaterial();
+                hi57.SetHighlight(false);
+            }
+            p57.transform.localPosition = plane057OpenLocalPosition;
+        }
+    }
+
+    public void ResetHoodPanels()
+    {
+        task03SubStage = 0;
+        isHoodRemovalCompleted = false;
+        isFinalHoodClosingCompleted = false;
+
+        var p58 = ResolvePlane058Target();
+        if (p58 != null)
+        {
+            var hi58 = p58.GetComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+            if (hi58 != null)
+            {
+                hi58.RestoreOriginalMaterial();
+                hi58.SetHighlight(false);
+            }
+            p58.transform.localPosition = plane058ClosedLocalPosition;
+        }
+
+        var p57 = ResolvePlane057Target();
+        if (p57 != null)
+        {
+            var hi57 = p57.GetComponent<PotLeakage.Interaction.HoodPanelInteraction>();
+            if (hi57 != null)
+            {
+                hi57.RestoreOriginalMaterial();
+                hi57.SetHighlight(false);
+            }
+            p57.transform.localPosition = plane057ClosedLocalPosition;
+        }
+    }
+
+    public void OnTask03Started()
+    {
+        task03SubStage = 0;
+        isHoodRemovalCompleted = false;
+        OnInterceptTaskCompletion = HandleTask03ProgressionIntercept;
+        ResetHoodPanels();
+        Debug.Log("[SequenceHelperFunctions] OnTask03Started: Task 03 interceptor attached, subStage=0");
+    }
+
+    public bool HandleTask03ProgressionIntercept()
+    {
+        ResolveHandler();
+        if (handler != null && handler.currentTask != 2)
+        {
+            task03SubStage = 0;
+            OnInterceptTaskCompletion = null;
+            return false;
+        }
+
+        if (task03SubStage == 0)
+        {
+            // Trainee clicked NEXT on "Pot leakage has occurred in Pot 69." -> Start manual hood sliding stage
+            StartHoodSlidingInteraction();
+            return true;
+        }
+        else if (task03SubStage == 1)
+        {
+            Debug.Log("[SequenceHelperFunctions] Task 03: Trainee must click Plane.058 (Right hood panel).");
+            return true;
+        }
+        else if (task03SubStage == 2)
+        {
+            Debug.Log("[SequenceHelperFunctions] Task 03: Trainee must click Plane.057 (Left hood panel).");
+            return true;
+        }
+        else if (task03SubStage >= 3)
+        {
+            if (isHoodRemovalCompleted)
+            {
+                task03SubStage = 0;
+                OnInterceptTaskCompletion = null;
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    public void StartHoodRemovalInteraction() => StartHoodSlidingInteraction();
+
+    public void StartHoodSlidingInteraction()
+    {
+        task03SubStage = 1;
+        isHoodRemovalCompleted = false;
+
+        // Ensure panels start in exact closed positions
+        var p58 = ResolvePlane058Target();
+        if (p58 != null) p58.transform.localPosition = plane058ClosedLocalPosition;
+        var p57 = ResolvePlane057Target();
+        if (p57 != null) p57.transform.localPosition = plane057ClosedLocalPosition;
+
+        UpdateUI(SlideHoodDescriptionText, SlideHoodStatusText, 3, 10, "TASK_03_SLIDE_HOOD", "Technical_Mark");
+
+        var hi58 = ResolvePlane058Interaction();
+        if (hi58 != null)
+        {
+            hi58.OnClicked = OnPlane058SlideClicked;
+            hi58.SetHighlight(true);
+        }
+
+        var hi57 = ResolvePlane057Interaction();
+        if (hi57 != null)
+        {
+            hi57.SetHighlight(false);
+            hi57.RestoreOriginalMaterial();
+        }
+
+        Debug.Log("[SequenceHelperFunctions] StartHoodSlidingInteraction: Plane.058 highlighted yellow. Waiting for click to slide open.");
+    }
+
+    public void OnPlane058SlideClicked()
+    {
+        var hi58 = ResolvePlane058Interaction();
+        if (hi58 != null)
+        {
+            hi58.OnClicked = null;
+            hi58.SetHighlight(false);
+            hi58.RestoreOriginalMaterial();
+            hi58.MoveSmoothly(plane058OpenLocalPosition, 1.2f, () =>
+            {
+                Debug.Log("[SequenceHelperFunctions] Plane.058 slid open to target position. Starting Plane.057 slide interaction.");
+                StartPlane057Slide();
+            });
+        }
+        else
+        {
+            var p58 = ResolvePlane058Target();
+            if (p58 != null) p58.transform.localPosition = plane058OpenLocalPosition;
+            StartPlane057Slide();
+        }
+    }
+
+    public void OnPlane058RemovalClicked() => OnPlane058SlideClicked();
+    public void OnPlane058SlideOutClicked() => OnPlane058SlideClicked();
+    public void OnPlane058SlideBackClicked() => OnPlane058SlideClicked();
+
+    public void StartPlane057Removal() => StartPlane057Slide();
+
+    public void StartPlane057Slide()
+    {
+        task03SubStage = 2;
+
+        var hi57 = ResolvePlane057Interaction();
+        if (hi57 != null)
+        {
+            hi57.OnClicked = OnPlane057SlideClicked;
+            hi57.SetHighlight(true);
+        }
+        Debug.Log("[SequenceHelperFunctions] StartPlane057Slide: Plane.057 highlighted yellow. Waiting for click to slide open.");
+    }
+
+    public void OnPlane057SlideClicked()
+    {
+        var hi57 = ResolvePlane057Interaction();
+        if (hi57 != null)
+        {
+            hi57.OnClicked = null;
+            hi57.SetHighlight(false);
+            hi57.RestoreOriginalMaterial();
+            hi57.MoveSmoothly(plane057OpenLocalPosition, 1.2f, () =>
+            {
+                Debug.Log("[SequenceHelperFunctions] Plane.057 slid open to target position. Hood sliding completed.");
+                task03SubStage = 3;
+                isHoodRemovalCompleted = true;
+            });
+        }
+        else
+        {
+            var p57 = ResolvePlane057Target();
+            if (p57 != null) p57.transform.localPosition = plane057OpenLocalPosition;
+            task03SubStage = 3;
+            isHoodRemovalCompleted = true;
+        }
+    }
+
+    public void OnPlane057RemovalClicked() => OnPlane057SlideClicked();
+    public void OnPlane057SlideOutClicked() => OnPlane057SlideClicked();
+    public void OnPlane057SlideBackClicked() => OnPlane057SlideClicked();
+
+    public void StartHoodClosingInteraction()
+    {
+        isFinalHoodClosingCompleted = false;
+
+        var p58 = ResolvePlane058Target();
+        if (p58 != null)
+        {
+            p58.transform.localPosition = plane058FinalCloseStartLocalPosition;
+        }
+
+        var p57 = ResolvePlane057Target();
+        if (p57 != null)
+        {
+            p57.transform.localPosition = plane057FinalCloseStartLocalPosition;
+        }
+
+        var hi58 = ResolvePlane058Interaction();
+        if (hi58 != null)
+        {
+            hi58.OnClicked = OnPlane058ClosingClicked;
+            hi58.SetHighlight(true);
+        }
+
+        var hi57 = ResolvePlane057Interaction();
+        if (hi57 != null)
+        {
+            hi57.SetHighlight(false);
+            hi57.RestoreOriginalMaterial();
+        }
+
+        Debug.Log("[SequenceHelperFunctions] StartHoodClosingInteraction: Plane.058 highlighted yellow. Waiting for click to close.");
+    }
+
+    public void OnPlane058ClosingClicked()
+    {
+        var hi58 = ResolvePlane058Interaction();
+        if (hi58 != null)
+        {
+            hi58.OnClicked = null;
+            hi58.SetHighlight(false);
+            hi58.RestoreOriginalMaterial();
+            hi58.MoveSmoothly(plane058FinalCloseTargetLocalPosition, 1.2f, () =>
+            {
+                Debug.Log("[SequenceHelperFunctions] Plane.058 closed to target position.");
+                StartPlane057Closing();
+            });
+        }
+        else
+        {
+            var p58 = ResolvePlane058Target();
+            if (p58 != null) p58.transform.localPosition = plane058FinalCloseTargetLocalPosition;
+            StartPlane057Closing();
+        }
+    }
+
+    public void StartPlane057Closing()
+    {
+        var hi57 = ResolvePlane057Interaction();
+        if (hi57 != null)
+        {
+            hi57.OnClicked = OnPlane057ClosingClicked;
+            hi57.SetHighlight(true);
+        }
+        Debug.Log("[SequenceHelperFunctions] StartPlane057Closing: Plane.057 highlighted yellow. Waiting for click to close.");
+    }
+
+    public void OnPlane057ClosingClicked()
+    {
+        var hi57 = ResolvePlane057Interaction();
+        if (hi57 != null)
+        {
+            hi57.OnClicked = null;
+            hi57.SetHighlight(false);
+            hi57.RestoreOriginalMaterial();
+            hi57.MoveSmoothly(plane057FinalCloseTargetLocalPosition, 1.2f, () =>
+            {
+                Debug.Log("[SequenceHelperFunctions] Plane.057 closed to target position. Final hood closing completed!");
+                isFinalHoodClosingCompleted = true;
+            });
+        }
+        else
+        {
+            var p57 = ResolvePlane057Target();
+            if (p57 != null) p57.transform.localPosition = plane057FinalCloseTargetLocalPosition;
+            isFinalHoodClosingCompleted = true;
+        }
+    }
+
+    public PotLeakage.VFX.BathPowderController ResolveBathPowderController()
+    {
+        var c51 = ResolveCube051Target();
+        if (c51 != null)
+        {
+            var piper = c51.transform.Find("piper");
+            var release = piper != null ? piper.Find("release") : null;
+            if (release != null)
+            {
+                var ctrl = release.GetComponent<PotLeakage.VFX.BathPowderController>();
+                if (ctrl == null) ctrl = release.gameObject.AddComponent<PotLeakage.VFX.BathPowderController>();
+                ctrl.InitializeComponents();
+                return ctrl;
+            }
+        }
+        return UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.BathPowderController>();
+    }
+
+    private GameObject pipesTarget;
+    public GameObject ResolvePipesTarget()
+    {
+        if (pipesTarget == null)
+        {
+            var p = GameObject.Find("PIPES");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "PIPES" && !IsPersistentObject(g))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            pipesTarget = p;
+        }
+        return pipesTarget;
+    }
+
+    public void ActivateCoolingPipes()
+    {
+        var p = ResolvePipesTarget();
+        if (p != null)
+        {
+            var ctrl = p.GetComponent<PotLeakage.VFX.CoolingPipesController>();
+            if (ctrl == null)
+            {
+                ctrl = p.AddComponent<PotLeakage.VFX.CoolingPipesController>();
+            }
+            ctrl.ActivateCoolingPipes();
+        }
+    }
+
+    public void DeactivateCoolingPipes()
+    {
+        var p = ResolvePipesTarget();
+        if (p != null)
+        {
+            var ctrl = p.GetComponent<PotLeakage.VFX.CoolingPipesController>();
+            if (ctrl != null)
+            {
+                ctrl.DeactivateCoolingPipes();
+            }
+            else
+            {
+                p.SetActive(false);
+            }
+        }
+    }
+
+    public void SnapCameraToNormalPotOperation()
+    {
+        var camCtrl = ResolveCameraController();
+        if (camCtrl != null)
+        {
+            camCtrl.MoveToNormalPotOperation();
+            return;
+        }
+
+        var tp = GameObject.Find("CameraSystem/TransformPoints/Normal Pot Operation")
+              ?? GameObject.Find("TransformPoints/Normal Pot Operation")
+              ?? GameObject.Find("Normal Pot Operation");
+        if (tp != null)
+        {
+            SnapCameraToTransform(tp.transform);
+        }
     }
 
     public GameObject ResolveWalkieCommunicationCanvas()
@@ -1230,16 +1914,16 @@ public class SequenceHelperFunctions : MonoBehaviour
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 1. TOOLBOX CAMERA → SAFETY GLOVES
+    // 1. TOOLBOX CAMERA → SIDE BREAKING TOOL (GLOVE STEP REMOVED)
     // ─────────────────────────────────────────────────────────────────────────
 
-    public const string GlovesInstructionText = "Equip safety gloves before picking up the side breaking tool.";
+    public const string GlovesInstructionText = "Select the Side Breaking Tool from the toolbox to proceed with side breaking and crust removal.";
     public const string SideBreakingToolInstructionText = "Select the Side Breaking Tool from the toolbox to proceed with side breaking and crust removal.";
     public const string StopperInstructionText = "Now carefully apply the stopper to the leakage point on the pot. Look for the area where smoke is visible and molten metal is flowing. If the leakage is wider, you may use an additional stopper to help control it.";
 
     public void BeginToolboxGloveInteraction()
     {
-        Debug.Log("[PotLeakage] BeginToolboxGloveInteraction: Snapping to ToolBoxSelection");
+        Debug.Log("[PotLeakage] BeginToolboxSelection: Snapping to ToolBoxSelection (Direct Side Breaking Tool)");
         ResetOpeningToolStates();
 
         var camCtrl = ResolveCameraController();
@@ -1253,162 +1937,32 @@ public class SequenceHelperFunctions : MonoBehaviour
             if (tp != null) SnapCameraToTransform(tp.transform);
         }
 
+        // Gloves remain permanently disabled and do not participate in training interaction
+        var gloves = ResolveGlovesTarget();
+        if (gloves != null)
+        {
+            gloves.SetActive(false);
+            StopGlovesBlink();
+        }
+
+        isGlovesConfirmed = true;
+        isGlovesInteractable = false;
+
         // During Toolbox Selection, SIDEREAKING TOOL is ON, SIDEREAKING TOOL (4) is OFF.
         var sideTool = ResolveSideBreakingTool();
         if (sideTool != null) sideTool.SetActive(true);
 
-        isGlovesConfirmed = false;
-        isGlovesInteractable = true;
-        isSideBreakingToolInteractable = false;
+        isSideBreakingToolInteractable = true;
+        isSideBreakingToolConfirmed = false;
         isStopperToolInteractable = false;
 
-        var gloves = ResolveGlovesTarget();
-        if (gloves != null)
-        {
-            gloves.SetActive(true);
-            CacheGlovesOriginalMaterials();
-            StartGlovesBlink();
-        }
-
-        OnInterceptTaskCompletion = () => !isGlovesConfirmed;
+        OnInterceptTaskCompletion = () => !isSideBreakingToolConfirmed;
 
         var ui = ResolvePotLeakageUI();
         if (ui != null)
         {
             if (ui.welcomePanel != null) ui.welcomePanel.SetActive(true);
             if (ui.titleText != null) ui.titleText.text = "Toolbox Selection";
-            if (ui.statusText != null)
-            {
-                ui.statusText.gameObject.SetActive(true);
-                ui.statusText.text = "EQUIP SAFETY GLOVES";
-            }
-            if (ui.descriptionText != null)
-            {
-                ui.descriptionText.gameObject.SetActive(true);
-                ui.descriptionText.text = GlovesInstructionText;
-            }
-            if (ui.nextButton != null) ui.nextButton.gameObject.SetActive(true);
-
-            ui.isGlovesInteractable = true;
-            ui.isGlovesConfirmed = false;
-
-            ui.SpeakDescriptionText(GlovesInstructionText);
-        }
-        else
-        {
-            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(GlovesInstructionText, GlovesInstructionText);
-        }
-    }
-
-    public void StartGlovesBlink()
-    {
-        var gloves = ResolveGlovesTarget();
-        if (gloves == null) return;
-
-        CacheGlovesOriginalMaterials();
-
-        if (glovesBlinkCoroutine != null)
-        {
-            StopCoroutine(glovesBlinkCoroutine);
-            glovesBlinkCoroutine = null;
-        }
-
-        isGlovesBlinking = true;
-
-        if (Application.isPlaying)
-        {
-            glovesBlinkCoroutine = StartCoroutine(GlovesBlinkRoutine());
-        }
-        else
-        {
-            ApplyGlovesHighlightState(true);
-        }
-    }
-
-    public void StopGlovesBlink()
-    {
-        isGlovesBlinking = false;
-        if (glovesBlinkCoroutine != null)
-        {
-            StopCoroutine(glovesBlinkCoroutine);
-            glovesBlinkCoroutine = null;
-        }
-        ApplyGlovesHighlightState(false);
-    }
-
-    private void ApplyGlovesHighlightState(bool highlight)
-    {
-        var gloves = ResolveGlovesTarget();
-        if (gloves == null) return;
-
-        if (glovesOriginalMaterials.Count == 0)
-        {
-            CacheGlovesOriginalMaterials();
-        }
-
-        Material hlMat = ResolveGlovesHighlightMaterial();
-        foreach (var kvp in glovesOriginalMaterials)
-        {
-            var r = kvp.Key;
-            var orig = kvp.Value;
-            if (r == null || orig == null) continue;
-
-            if (highlight && hlMat != null)
-            {
-                Material[] hlMats = new Material[orig.Length];
-                for (int i = 0; i < hlMats.Length; i++) hlMats[i] = hlMat;
-                r.sharedMaterials = hlMats;
-            }
-            else
-            {
-                r.sharedMaterials = orig;
-            }
-        }
-    }
-
-    private IEnumerator GlovesBlinkRoutine()
-    {
-        isGlovesBlinking = true;
-        bool showHighlight = true;
-        while (isGlovesBlinking && !isGlovesConfirmed)
-        {
-            ApplyGlovesHighlightState(showHighlight);
-            yield return new WaitForSeconds(0.5f);
-            showHighlight = !showHighlight;
-        }
-        ApplyGlovesHighlightState(false);
-        glovesBlinkCoroutine = null;
-        isGlovesBlinking = false;
-    }
-
-    public void HandleGlovesClicked()
-    {
-        if (!isGlovesInteractable && (potLeakageUI == null || !potLeakageUI.isGlovesInteractable)) return;
-
-        isGlovesInteractable = false;
-        isGlovesConfirmed = true;
-
-        if (potLeakageUI != null)
-        {
-            potLeakageUI.isGlovesInteractable = false;
-            potLeakageUI.isGlovesConfirmed = true;
-            potLeakageUI.PlaySFX(potLeakageUI.clickAudioClip);
-        }
-
-        StopGlovesBlink();
-        Debug.Log("[PotLeakage] Gloves clicked. Blink stopped, original materials restored.");
-
-        // 1. Disable gloves
-        var gloves = ResolveGlovesTarget();
-        if (gloves != null) gloves.SetActive(false);
-
-        // 2. Enable SIDEREAKING TOOL (Do NOT touch (1), (2), (3))
-        var tool = ResolveSideBreakingTool();
-        if (tool != null) tool.SetActive(true);
-
-        var ui = ResolvePotLeakageUI();
-        if (ui != null)
-        {
             if (ui.statusText != null)
             {
                 ui.statusText.gameObject.SetActive(true);
@@ -1419,14 +1973,66 @@ public class SequenceHelperFunctions : MonoBehaviour
                 ui.descriptionText.gameObject.SetActive(true);
                 ui.descriptionText.text = SideBreakingToolInstructionText;
             }
-            ui.SpeakDescriptionText(SideBreakingToolInstructionText);
+            if (ui.nextButton != null) ui.nextButton.gameObject.SetActive(true);
+
+            ui.isGlovesInteractable = false;
+            ui.isGlovesConfirmed = true;
+            ui.isSideBreakingToolInteractable = true;
+            ui.isSideBreakingToolConfirmed = false;
+
+            if (ui.valueDisplay != null)
+            {
+                ui.valueDisplay.SetTitle("Toolbox Selection");
+                ui.valueDisplay.DisplayNormalStatus("SELECT SIDE BREAKING TOOL");
+                ui.valueDisplay.HideValueDisplay();
+            }
+
+            ui.StartSideBreakingToolHighlight();
+            ui.SpeakDescriptionText(SideBreakingToolInstructionText, "TASK_09_TOOLBOX", "Technical_Mark");
         }
         else
         {
-            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(SideBreakingToolInstructionText, SideBreakingToolInstructionText);
+            HighlightSideBreakingTool();
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(SideBreakingToolInstructionText, "TASK_09_TOOLBOX", "Technical_Mark");
         }
+    }
 
-        StartSideBreakingToolSelection();
+    public void StartGlovesBlink()
+    {
+        // Glove interaction removed - keep gloves disabled and do not blink
+        var gloves = ResolveGlovesTarget();
+        if (gloves != null) gloves.SetActive(false);
+    }
+
+    public void StopGlovesBlink()
+    {
+        isGlovesBlinking = false;
+        if (glovesBlinkCoroutine != null)
+        {
+            StopCoroutine(glovesBlinkCoroutine);
+            glovesBlinkCoroutine = null;
+        }
+    }
+
+    private void ApplyGlovesHighlightState(bool highlight)
+    {
+        // Glove interaction removed - keep gloves disabled
+        var gloves = ResolveGlovesTarget();
+        if (gloves != null) gloves.SetActive(false);
+    }
+
+    private IEnumerator GlovesBlinkRoutine()
+    {
+        isGlovesBlinking = false;
+        glovesBlinkCoroutine = null;
+        yield break;
+    }
+
+    public void HandleGlovesClicked()
+    {
+        // Glove interaction removed - ensure gloves disabled
+        var gloves = ResolveGlovesTarget();
+        if (gloves != null) gloves.SetActive(false);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1566,12 +2172,11 @@ public class SequenceHelperFunctions : MonoBehaviour
         }
     }
 
-    public void ActivateSideBreakingTool5()
+    public void RestoreSideBreakingTool5OriginalMaterials()
     {
         var tool5 = ResolveSideBreakingTool5();
         if (tool5 != null)
         {
-            tool5.SetActive(true);
             var r = tool5.GetComponentInChildren<Renderer>(true);
             if (r != null)
             {
@@ -1584,6 +2189,45 @@ public class SequenceHelperFunctions : MonoBehaviour
                 }
 #endif
             }
+        }
+    }
+
+    public void PlayThudSFX()
+    {
+        if (thudAudioClip == null)
+        {
+#if UNITY_EDITOR
+            thudAudioClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/thud.mp3");
+#endif
+        }
+        if (thudAudioClip != null)
+        {
+            PlaySFX(thudAudioClip);
+        }
+    }
+
+    [SerializeField] private AudioClip gasAudioClip;
+    public void PlayGasSFX()
+    {
+        if (gasAudioClip == null)
+        {
+#if UNITY_EDITOR
+            gasAudioClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/gass.mp3");
+#endif
+        }
+        if (gasAudioClip != null)
+        {
+            PlaySFX(gasAudioClip);
+        }
+    }
+
+    public void ActivateSideBreakingTool5()
+    {
+        var tool5 = ResolveSideBreakingTool5();
+        if (tool5 != null)
+        {
+            RestoreSideBreakingTool5OriginalMaterials();
+            tool5.SetActive(true);
             Debug.Log("[PotLeakage] SIDEREAKING TOOL (5) enabled with original materials.");
         }
     }
@@ -1633,11 +2277,11 @@ public class SequenceHelperFunctions : MonoBehaviour
 
             ui.isStopperToolInteractable = true;
             ui.isStopperToolConfirmed = false;
-            ui.SpeakDescriptionText(StopperInstructionText, "TASK_10_APPLY_STOPPER");
+            ui.SpeakDescriptionText(StopperInstructionText, "TASK_10_APPLY_STOPPER", "Technical_Mark");
         }
         else
         {
-            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(StopperInstructionText, "TASK_10_APPLY_STOPPER");
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(StopperInstructionText, "TASK_10_APPLY_STOPPER", "Technical_Mark");
         }
 
         Debug.Log("[PotLeakage] Normal Pot Stopper Interaction active. Description displayed, SIDEREAKING TOOL (6) interactable.");
@@ -1650,23 +2294,23 @@ public class SequenceHelperFunctions : MonoBehaviour
         var yellowMat = ResolveYellowHighlightMaterial();
         leakagePointHighlightSlots.Clear();
 
-        // Scan scene for renderers that use Stylized_MetalGrid_01_basecolor or plane_divided_DefaultMaterial_BaseColor
+        // Scan scene for renderers on tool6 that use Stylized_MetalGrid_01_basecolor or plane_divided_DefaultMaterial_BaseColor
         var tool6 = ResolveSideBreakingTool6();
+        var tool5 = ResolveSideBreakingTool5();
         List<Renderer> candidateRenderers = new List<Renderer>();
         if (tool6 != null)
         {
             candidateRenderers.AddRange(tool6.GetComponentsInChildren<Renderer>(true));
-        }
-        var tool5 = ResolveSideBreakingTool5();
-        if (tool5 != null)
-        {
-            candidateRenderers.AddRange(tool5.GetComponentsInChildren<Renderer>(true));
         }
 
         var allRenderers = Resources.FindObjectsOfTypeAll<Renderer>();
         foreach (var r in allRenderers)
         {
             if (r == null || IsPersistentObject(r.gameObject)) continue;
+            // SIDEREAKING TOOL (5) must NEVER have any highlight applied (Part 1)
+            if (tool5 != null && (r.gameObject == tool5 || r.transform.IsChildOf(tool5.transform))) continue;
+            if (r.gameObject.name.Contains("(5)")) continue;
+
             if (r.gameObject.activeInHierarchy && !candidateRenderers.Contains(r))
             {
                 string rName = r.gameObject.name;
@@ -1778,6 +2422,13 @@ public class SequenceHelperFunctions : MonoBehaviour
         Debug.Log("[PotLeakage] Leakage point highlight stopped and original materials restored.");
     }
 
+    public const string StopperAppliedText = "The stopper has been applied to the leakage point. Use the tool to complete the leakage-control step.";
+    public const string FurtherToolsDescriptionText = "Let us use further tools in order to reduce or stop the intensity of the leakage.";
+    public const string ArrangeCoolingPipesText = "Let us arrange the cooling pipes.";
+    public const string ClickCoolingPipesText = "Click the highlighted cooling pipes to begin cooling the leakage area.";
+    public const string CoolingGasDirectedText = "Cooling gas is now being directed toward the leakage point. The leakage intensity is reducing.";
+    public const string CoolingGasReducingText = "The cooling gas is reducing the intensity of the molten metal leakage.";
+
     public void HandleStopperToolClicked()
     {
         if (!isStopperToolInteractable && (potLeakageUI == null || !potLeakageUI.isStopperToolInteractable)) return;
@@ -1792,48 +2443,395 @@ public class SequenceHelperFunctions : MonoBehaviour
             potLeakageUI.PlaySFX(potLeakageUI.clickAudioClip);
         }
 
+        // Play thud sound once per successful SIDEREAKING TOOL (6) click
+        PlayThudSFX();
+
         // 1. Stop any highlight/blink associated with stopper interaction
-        // 2. Restore original materials for Stylized_MetalGrid_01_basecolor & plane_divided_DefaultMaterial_BaseColor
         StopLeakagePointHighlight();
 
-        // 3. Disable SIDEREAKING TOOL (6)
+        // 2. Disable SIDEREAKING TOOL (6)
         var tool6 = ResolveSideBreakingTool6();
         if (tool6 != null) tool6.SetActive(false);
 
-        // 4. Enable SIDEREAKING TOOL (5) with original materials
+        // 3. Enable SIDEREAKING TOOL (5) with its ORIGINAL materials (NO highlight material, NO blinking)
         ActivateSideBreakingTool5();
+        isSideBreakingTool5Interactable = true;
+        hasClickedSideBreakingTool5 = false;
+        if (potLeakageUI != null)
+        {
+            potLeakageUI.isSideBreakingTool5Interactable = true;
+            potLeakageUI.isSideBreakingTool5Confirmed = false;
+        }
 
-        // 5. Reduce MoltenAluminium_VFX intensity/visual size
-        ReduceMoltenLeakageVFX();
+        // 4. Snap camera directly to TransformPoints/Normal Pot Operation
+        SnapCameraToNormalPotOperation();
 
-        OnInterceptTaskCompletion = null;
+        // 5. Reduce intensity of MoltenAluminium_VFX smoothly over 1.2s (Stage 1: Stopper Applied)
+        ApplyStopperReductionVFX(1.2f);
 
-        string completeDesc = "The stopper has been applied to the leakage point. Molten metal flow is noticeably reduced.";
+        // Keep task completion intercepted so Next cannot advance prematurely
+        OnInterceptTaskCompletion = () => !hasClickedPipesHighlight;
+
+        // 6. Update UI description and voiceover: Old Male Voice ("Technical_Mark")
         var ui = ResolvePotLeakageUI();
         if (ui != null)
         {
             if (ui.statusText != null)
             {
                 ui.statusText.gameObject.SetActive(true);
-                ui.statusText.text = "STOPPER APPLIED — LEAKAGE REDUCED";
+                ui.statusText.text = "STOPPER APPLIED";
             }
             if (ui.descriptionText != null)
             {
                 ui.descriptionText.gameObject.SetActive(true);
-                ui.descriptionText.text = completeDesc;
+                ui.descriptionText.text = StopperAppliedText;
             }
-            if (ui.nextButton != null) ui.nextButton.gameObject.SetActive(true);
-            ui.SpeakDescriptionText(completeDesc);
+            if (ui.valueDisplay != null)
+            {
+                ui.valueDisplay.SetTitle("Stopper Applied");
+                ui.valueDisplay.DisplayNormalStatus("STOPPER APPLIED");
+                ui.valueDisplay.HideValueDisplay();
+            }
+            ui.SpeakDescriptionText(StopperAppliedText, "TASK_10_STOPPER_APPLIED", "Technical_Mark");
         }
         else
         {
-            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(completeDesc, completeDesc);
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(StopperAppliedText, "TASK_10_STOPPER_APPLIED", "Technical_Mark");
         }
 
-        Debug.Log("[PotLeakage] Stopper applied: SIDEREAKING TOOL (6) disabled, SIDEREAKING TOOL (5) enabled with original materials, MoltenAluminium_VFX reduced.");
+        // 7. Wait for Voice to finish -> then enable PIPES Highlight, start blinking yellow, speak FurtherToolsDescriptionText
+        if (Application.isPlaying)
+        {
+            StartCoroutine(WaitForStopperVoiceAndTransitionRoutine());
+        }
+
+        Debug.Log("[PotLeakage] Stopper tool (6) clicked -> camera snapped to Normal Pot Operation, tool (5) active, stopper applied. Waiting for voice completion to enable PIPES Highlight.");
     }
 
-    public void ReduceMoltenLeakageVFX()
+    private IEnumerator WaitForStopperVoiceAndTransitionRoutine()
+    {
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        AudioSource voiceSource = mgr != null ? mgr.GetVoiceAudioSource() : null;
+
+        float startTime = Time.realtimeSinceStartup;
+        // Wait for speech to start (or timeout)
+        yield return new WaitUntil(() => (mgr != null && mgr.IsSpeaking) || (voiceSource != null && voiceSource.isPlaying) || (Time.realtimeSinceStartup - startTime) > 1.0f);
+
+        // Wait for speech to finish (or fallback timeout so training never hangs)
+        float speechStart = Time.realtimeSinceStartup;
+        if ((mgr != null && mgr.IsSpeaking) || (voiceSource != null && voiceSource.isPlaying))
+        {
+            yield return new WaitUntil(() => (!mgr.IsSpeaking && (voiceSource == null || !voiceSource.isPlaying)) || (Time.realtimeSinceStartup - speechStart) > 10.0f);
+        }
+        else
+        {
+            yield return new WaitForSeconds(2.0f);
+        }
+
+        yield return new WaitForSeconds(0.2f);
+
+        // VOICE FINISHES -> Transition to PIPES Highlight
+        TransitionStopperVoiceFinishedToPipesHighlight();
+    }
+
+    public void TransitionStopperVoiceFinishedToPipesHighlight()
+    {
+        // 1. Instantly snap camera to TransformPoints/Normal Pot Operation (zero pan)
+        SnapCameraToNormalPotOperation();
+
+        // SIDEREAKING TOOL (5) MUST NOT be disabled during cooling
+        StopSideBreakingTool5Blink();
+        var tool5 = ResolveSideBreakingTool5();
+        if (tool5 != null) tool5.SetActive(true);
+
+        // 2. Enable PIPES Highlight and start blinking yellow
+        isPipesHighlightInteractable = true;
+        hasClickedPipesHighlight = false;
+        var ui = ResolvePotLeakageUI();
+        if (ui != null)
+        {
+            ui.isPipesHighlightInteractable = true;
+            ui.hasClickedPipesHighlight = false;
+            if (ui.statusText != null)
+            {
+                ui.statusText.gameObject.SetActive(true);
+                ui.statusText.text = "ARRANGE COOLING PIPES";
+            }
+            if (ui.descriptionText != null)
+            {
+                ui.descriptionText.gameObject.SetActive(true);
+                ui.descriptionText.text = FurtherToolsDescriptionText;
+            }
+            ui.SpeakDescriptionText(FurtherToolsDescriptionText, "TASK_10_FURTHER_TOOLS", "Technical_Mark");
+        }
+        else
+        {
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(FurtherToolsDescriptionText, "TASK_10_FURTHER_TOOLS", "Technical_Mark");
+        }
+
+        StartPipesHighlightBlink();
+
+        Debug.Log("[PotLeakage] Voice finished -> Snapped to Normal Pot Operation -> PIPES Highlight enabled and blinking.");
+    }
+
+    public void HandleSideBreakingTool5Clicked()
+    {
+        if (hasClickedSideBreakingTool5) return;
+        hasClickedSideBreakingTool5 = true;
+        isSideBreakingTool5Interactable = false;
+
+        if (potLeakageUI != null)
+        {
+            potLeakageUI.isSideBreakingTool5Interactable = false;
+            potLeakageUI.isSideBreakingTool5Confirmed = true;
+            potLeakageUI.PlaySFX(potLeakageUI.clickAudioClip);
+        }
+
+        StopSideBreakingTool5Blink();
+        var tool5 = ResolveSideBreakingTool5();
+        if (tool5 != null) tool5.SetActive(true); // Tool 5 remains active during cooling
+
+        if (!isPipesHighlightInteractable && !hasClickedPipesHighlight)
+        {
+            TransitionStopperVoiceFinishedToPipesHighlight();
+        }
+    }
+
+    public void HandlePipesHighlightClicked()
+    {
+        if (hasClickedPipesHighlight) return;
+        if (!isPipesHighlightInteractable && (potLeakageUI == null || !potLeakageUI.isPipesHighlightInteractable)) return;
+
+        hasClickedPipesHighlight = true;
+        isPipesHighlightInteractable = false;
+
+        if (potLeakageUI != null)
+        {
+            potLeakageUI.isPipesHighlightInteractable = false;
+            potLeakageUI.hasClickedPipesHighlight = true;
+            potLeakageUI.PlaySFX(potLeakageUI.clickAudioClip);
+        }
+
+        // 1. Stop blinking and restore original materials on PIPES Highlight, then disable it
+        StopPipesHighlightBlink();
+        var pipesH = ResolvePipesHighlightTarget();
+        if (pipesH != null) pipesH.SetActive(false);
+
+        // 2. Enable PIPES and start cooling gas
+        ActivateCoolingPipes();
+
+        // 3. Second molten metal reduction: intensity reduces further & becomes EVEN SLOWER (Stage 2: Cooling Pipes)
+        ApplyPipesReductionVFX(2.0f);
+
+        // 4. Start coroutine for voiceovers and completion
+        if (Application.isPlaying)
+        {
+            StartCoroutine(CoolingGasReductionSequenceRoutine());
+        }
+        else
+        {
+            OnInterceptTaskCompletion = null;
+        }
+    }
+
+    private IEnumerator CoolingGasReductionSequenceRoutine()
+    {
+        var ui = ResolvePotLeakageUI();
+        if (ui != null)
+        {
+            if (ui.statusText != null)
+            {
+                ui.statusText.gameObject.SetActive(true);
+                ui.statusText.text = "COOLING LEAKAGE AREA";
+            }
+            if (ui.descriptionText != null)
+            {
+                ui.descriptionText.gameObject.SetActive(true);
+                ui.descriptionText.text = CoolingGasDirectedText;
+            }
+            ui.SpeakDescriptionText(CoolingGasDirectedText, "TASK_10_GAS_DIRECTED", "Technical_Mark");
+        }
+        else
+        {
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(CoolingGasDirectedText, "TASK_10_GAS_DIRECTED", "Technical_Mark");
+        }
+
+        // Wait 2.0s for molten reduction visual progress and first VO to be heard
+        yield return new WaitForSeconds(2.0f);
+
+        if (ui != null)
+        {
+            if (ui.descriptionText != null)
+            {
+                ui.descriptionText.text = CoolingGasReducingText;
+            }
+            ui.SpeakDescriptionText(CoolingGasReducingText, "TASK_10_GAS_REDUCING", "Technical_Mark");
+            if (ui.nextButton != null) ui.nextButton.gameObject.SetActive(true);
+        }
+        else
+        {
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(CoolingGasReducingText, "TASK_10_GAS_REDUCING", "Technical_Mark");
+        }
+
+        // Wait for voice over "The cooling gas is reducing the intensity of the molten metal leakage." to finish
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        AudioSource voiceSource = mgr != null ? mgr.GetVoiceAudioSource() : null;
+        float startTime = Time.realtimeSinceStartup;
+        yield return new WaitUntil(() => (mgr != null && mgr.IsSpeaking) || (voiceSource != null && voiceSource.isPlaying) || (Time.realtimeSinceStartup - startTime) > 1.0f);
+        float speechStart = Time.realtimeSinceStartup;
+        if ((mgr != null && mgr.IsSpeaking) || (voiceSource != null && voiceSource.isPlaying))
+        {
+            yield return new WaitUntil(() => (!mgr.IsSpeaking && (voiceSource == null || !voiceSource.isPlaying)) || (Time.realtimeSinceStartup - speechStart) > 8.0f);
+        }
+        else
+        {
+            yield return new WaitForSeconds(2.5f);
+        }
+
+        // When voice finishes, reduce molten leakage width slightly (narrower stream, slow movement, does NOT stop)
+        ApplyCoolingVoiceFinishedReductionVFX(1.5f);
+
+        // Release Next button interceptor! Trainee can now click Next/Continue to complete Task
+        OnInterceptTaskCompletion = null;
+        Debug.Log("[PotLeakage] Cooling gas voice complete -> Molten stream width reduced slightly. Trainee may now advance to next task.");
+    }
+
+    public void StartSideBreakingTool5Blink()
+    {
+        // SIDEREAKING TOOL (5) must NOT use any highlight material and must NEVER blink (Part 1).
+        // It must always retain its original materials.
+        ActivateSideBreakingTool5();
+    }
+
+    private void ApplySideBreakingTool5HighlightState(bool highlight)
+    {
+        // Safe no-op: SIDEREAKING TOOL (5) retains original materials
+        ActivateSideBreakingTool5();
+    }
+
+    private IEnumerator SideBreakingTool5BlinkRoutine()
+    {
+        // Safe no-op
+        yield break;
+    }
+
+    public void StopSideBreakingTool5Blink()
+    {
+        if (sideBreakingTool5BlinkCoroutine != null)
+        {
+            if (Application.isPlaying) StopCoroutine(sideBreakingTool5BlinkCoroutine);
+            sideBreakingTool5BlinkCoroutine = null;
+        }
+
+        RestoreSideBreakingTool5OriginalMaterials();
+        sideBreakingTool5HighlightSlots.Clear();
+    }
+
+    public void StartPipesHighlightBlink()
+    {
+        StopPipesHighlightBlink();
+        PlayGasSFX();
+        var pipesH = ResolvePipesHighlightTarget();
+        if (pipesH == null) return;
+
+        pipesH.SetActive(true);
+        var yellowMat = ResolveYellowHighlightMaterial();
+        pipesHighlightSlots.Clear();
+
+        var renderers = pipesH.GetComponentsInChildren<MeshRenderer>(true);
+        foreach (var r in renderers)
+        {
+            if (r == null) continue;
+            Material[] mats = r.sharedMaterials;
+            for (int s = 0; s < mats.Length; s++)
+            {
+                var m = mats[s];
+                Material orig = m;
+                if (orig != null && orig.name.Contains("Highlight"))
+                {
+#if UNITY_EDITOR
+                    if (r.gameObject.name.Contains("Plane"))
+                        orig = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Model/Materials/grained white plastic_BaseColor.mat");
+                    else
+                        orig = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/Model/Materials/6_Color.mat");
+#endif
+                }
+                pipesHighlightSlots.Add(new RendererSlotHighlight
+                {
+                    renderer = r,
+                    slotIndex = s,
+                    originalMaterial = orig,
+                    targetMatName = m != null ? m.name : ""
+                });
+            }
+        }
+
+        if (Application.isPlaying)
+        {
+            pipesHighlightBlinkCoroutine = StartCoroutine(PipesHighlightBlinkRoutine());
+        }
+        else
+        {
+            ApplyPipesHighlightState(true);
+        }
+    }
+
+    private void ApplyPipesHighlightState(bool highlight)
+    {
+        var yellowMat = ResolveYellowHighlightMaterial();
+        for (int i = 0; i < pipesHighlightSlots.Count; i++)
+        {
+            var slot = pipesHighlightSlots[i];
+            if (slot.renderer != null)
+            {
+                Material[] mats = slot.renderer.sharedMaterials;
+                if (slot.slotIndex >= 0 && slot.slotIndex < mats.Length)
+                {
+                    mats[slot.slotIndex] = highlight ? (yellowMat != null ? yellowMat : slot.originalMaterial) : slot.originalMaterial;
+                    slot.renderer.sharedMaterials = mats;
+                }
+            }
+        }
+    }
+
+    private IEnumerator PipesHighlightBlinkRoutine()
+    {
+        bool showHighlight = true;
+        while (isPipesHighlightInteractable && !hasClickedPipesHighlight)
+        {
+            ApplyPipesHighlightState(showHighlight);
+            yield return new WaitForSeconds(0.45f);
+            showHighlight = !showHighlight;
+        }
+        ApplyPipesHighlightState(false);
+        pipesHighlightBlinkCoroutine = null;
+    }
+
+    public void StopPipesHighlightBlink()
+    {
+        if (pipesHighlightBlinkCoroutine != null)
+        {
+            if (Application.isPlaying) StopCoroutine(pipesHighlightBlinkCoroutine);
+            pipesHighlightBlinkCoroutine = null;
+        }
+
+        for (int i = 0; i < pipesHighlightSlots.Count; i++)
+        {
+            var slot = pipesHighlightSlots[i];
+            if (slot.renderer != null && slot.originalMaterial != null)
+            {
+                Material[] mats = slot.renderer.sharedMaterials;
+                if (slot.slotIndex >= 0 && slot.slotIndex < mats.Length)
+                {
+                    mats[slot.slotIndex] = slot.originalMaterial;
+                    slot.renderer.sharedMaterials = mats;
+                }
+            }
+        }
+        pipesHighlightSlots.Clear();
+    }
+
+    public void ApplyStopperReductionVFX(float duration = 1.2f)
     {
         var vfxGo = GameObject.Find("VFX/MoltenAluminium_VFX") ?? GameObject.Find("MoltenAluminium_VFX");
         if (vfxGo == null)
@@ -1854,20 +2852,155 @@ public class SequenceHelperFunctions : MonoBehaviour
             var controller = vfxGo.GetComponent<PotLeakage.VFX.MoltenAluminiumVFXController>();
             if (controller != null)
             {
-                controller.SetControlledLeakage(true, 1.0f);
+                controller.ApplyStopperReduction(duration);
+                Debug.Log($"[PotLeakage] MoltenAluminiumVFXController.ApplyStopperReduction({duration}) called successfully.");
+                return;
+            }
+
+            var streamParticles = vfxGo.GetComponentInChildren<PotLeakage.VFX.MoltenMetalStreamParticles>(true);
+            if (streamParticles != null)
+            {
+                streamParticles.ApplyStopperReduction(duration);
+                Debug.Log($"[PotLeakage] MoltenMetalStreamParticles.ApplyStopperReduction({duration}) called directly.");
+                return;
+            }
+        }
+
+        var standaloneStreamParticles = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenMetalStreamParticles>();
+        if (standaloneStreamParticles != null)
+        {
+            standaloneStreamParticles.ApplyStopperReduction(duration);
+            Debug.Log($"[PotLeakage] Standalone MoltenMetalStreamParticles.ApplyStopperReduction({duration}) called directly.");
+            return;
+        }
+
+        ReduceMoltenLeakageVFX(duration);
+    }
+
+    public void ApplyPipesReductionVFX(float duration = 2.0f)
+    {
+        var vfxGo = GameObject.Find("VFX/MoltenAluminium_VFX") ?? GameObject.Find("MoltenAluminium_VFX");
+        if (vfxGo == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if (g.name == "MoltenAluminium_VFX" && !IsPersistentObject(g))
+                {
+                    vfxGo = g;
+                    break;
+                }
+            }
+        }
+
+        if (vfxGo != null)
+        {
+            var controller = vfxGo.GetComponent<PotLeakage.VFX.MoltenAluminiumVFXController>();
+            if (controller != null)
+            {
+                controller.ApplyPipesReduction(duration);
+                Debug.Log($"[PotLeakage] MoltenAluminiumVFXController.ApplyPipesReduction({duration}) called successfully.");
+                return;
+            }
+
+            var streamParticles = vfxGo.GetComponentInChildren<PotLeakage.VFX.MoltenMetalStreamParticles>(true);
+            if (streamParticles != null)
+            {
+                streamParticles.ApplyPipesReduction(duration);
+                Debug.Log($"[PotLeakage] MoltenMetalStreamParticles.ApplyPipesReduction({duration}) called directly.");
+                return;
+            }
+        }
+
+        var standaloneStreamParticles = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenMetalStreamParticles>();
+        if (standaloneStreamParticles != null)
+        {
+            standaloneStreamParticles.ApplyPipesReduction(duration);
+            Debug.Log($"[PotLeakage] Standalone MoltenMetalStreamParticles.ApplyPipesReduction({duration}) called directly.");
+            return;
+        }
+
+        ReduceMoltenLeakageVFX(duration);
+    }
+
+    public void ApplyCoolingVoiceFinishedReductionVFX(float duration = 1.5f)
+    {
+        var vfxGo = GameObject.Find("VFX/MoltenAluminium_VFX") ?? GameObject.Find("MoltenAluminium_VFX");
+        if (vfxGo == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if (g.name == "MoltenAluminium_VFX" && !IsPersistentObject(g))
+                {
+                    vfxGo = g;
+                    break;
+                }
+            }
+        }
+
+        if (vfxGo != null)
+        {
+            var controller = vfxGo.GetComponent<PotLeakage.VFX.MoltenAluminiumVFXController>();
+            if (controller != null)
+            {
+                controller.ApplyCoolingVoiceFinishedReduction(duration);
+                Debug.Log($"[PotLeakage] MoltenAluminiumVFXController.ApplyCoolingVoiceFinishedReduction({duration}) called successfully.");
+                return;
+            }
+
+            var streamParticles = vfxGo.GetComponentInChildren<PotLeakage.VFX.MoltenMetalStreamParticles>(true);
+            if (streamParticles != null)
+            {
+                streamParticles.ApplyCoolingVoiceFinishedReduction(duration);
+                Debug.Log($"[PotLeakage] MoltenMetalStreamParticles.ApplyCoolingVoiceFinishedReduction({duration}) called directly.");
+                return;
+            }
+        }
+
+        var standaloneStreamParticles = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenMetalStreamParticles>();
+        if (standaloneStreamParticles != null)
+        {
+            standaloneStreamParticles.ApplyCoolingVoiceFinishedReduction(duration);
+            Debug.Log($"[PotLeakage] Standalone MoltenMetalStreamParticles.ApplyCoolingVoiceFinishedReduction({duration}) called directly.");
+        }
+    }
+
+    public void ReduceMoltenLeakageVFX(float duration = 1.5f)
+    {
+        var vfxGo = GameObject.Find("VFX/MoltenAluminium_VFX") ?? GameObject.Find("MoltenAluminium_VFX");
+        if (vfxGo == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if (g.name == "MoltenAluminium_VFX" && !IsPersistentObject(g))
+                {
+                    vfxGo = g;
+                    break;
+                }
+            }
+        }
+
+        if (vfxGo != null)
+        {
+            var controller = vfxGo.GetComponent<PotLeakage.VFX.MoltenAluminiumVFXController>();
+            if (controller != null)
+            {
+                controller.SetControlledLeakage(true, duration);
                 if (controller.flowMesh != null)
                 {
-                    controller.flowMesh.SetControlled(true, 1.0f);
+                    controller.flowMesh.SetControlled(true, duration);
                 }
-                Debug.Log("[PotLeakage] MoltenAluminiumVFXController.SetControlledLeakage(true) called successfully.");
+                Debug.Log($"[PotLeakage] MoltenAluminiumVFXController.SetControlledLeakage(true, {duration}) called successfully.");
                 return;
             }
 
             var flowMesh = vfxGo.GetComponentInChildren<PotLeakage.VFX.MoltenMetalFlowMesh>(true);
             if (flowMesh != null)
             {
-                flowMesh.SetControlled(true, 1.0f);
-                Debug.Log("[PotLeakage] MoltenMetalFlowMesh.SetControlled(true) called directly.");
+                flowMesh.SetControlled(true, duration);
+                Debug.Log($"[PotLeakage] MoltenMetalFlowMesh.SetControlled(true, {duration}) called directly.");
                 return;
             }
         }
@@ -1875,8 +3008,8 @@ public class SequenceHelperFunctions : MonoBehaviour
         var standaloneFlowMesh = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenMetalFlowMesh>();
         if (standaloneFlowMesh != null)
         {
-            standaloneFlowMesh.SetControlled(true, 1.0f);
-            Debug.Log("[PotLeakage] Standalone MoltenMetalFlowMesh.SetControlled(true) called directly.");
+            standaloneFlowMesh.SetControlled(true, duration);
+            Debug.Log($"[PotLeakage] Standalone MoltenMetalFlowMesh.SetControlled(true, {duration}) called directly.");
             return;
         }
 
@@ -1909,8 +3042,18 @@ public class SequenceHelperFunctions : MonoBehaviour
                 {
                     controller.flowMesh.SetControlled(false, 0f);
                 }
-                Debug.Log("[PotLeakage] MoltenAluminiumVFXController.SetControlledLeakage(false) restored.");
+                if (controller.streamParticles != null)
+                {
+                    controller.streamParticles.ResetToFull(0f);
+                }
+                Debug.Log("[PotLeakage] MoltenAluminiumVFXController.SetControlledLeakage(false) and ResetToFull restored.");
                 return;
+            }
+
+            var streamParticles = vfxGo.GetComponentInChildren<PotLeakage.VFX.MoltenMetalStreamParticles>(true);
+            if (streamParticles != null)
+            {
+                streamParticles.ResetToFull(0f);
             }
 
             var flowMesh = vfxGo.GetComponentInChildren<PotLeakage.VFX.MoltenMetalFlowMesh>(true);
@@ -1922,12 +3065,2278 @@ public class SequenceHelperFunctions : MonoBehaviour
             }
         }
 
+        var standaloneStreamParticles = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenMetalStreamParticles>();
+        if (standaloneStreamParticles != null)
+        {
+            standaloneStreamParticles.ResetToFull(0f);
+        }
+
         var standaloneFlowMesh = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenMetalFlowMesh>();
         if (standaloneFlowMesh != null)
         {
             standaloneFlowMesh.SetControlled(false, 0f);
             Debug.Log("[PotLeakage] Standalone MoltenMetalFlowMesh.SetControlled(false) restored directly.");
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PTM CRANE PREPARATION (Task 10)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public const string SlideHoodDescriptionText = "Slide the hood.";
+    public const string SlideHoodStatusText = "Slide the Hood";
+    public const string RemoveHoodDescriptionText = "Slide the hood.";
+    public const string RemoveHoodStatusText = "Slide the Hood";
+    public const string PTMCraneDescriptionText = "The intensity is reduced but not stopped. Let us arrange PTM crane for pot breaking process, and the bath bin is also arranged by forklift.";
+    public const string SideBreakingDescriptionText = "Side breaking above the leakage has started.";
+    public const string ObserveRedShellDescriptionText = "Observe the red shell formation in the shell.";
+    public const string RedShellDescriptionText = ObserveRedShellDescriptionText;
+    public const string UseHoesDescriptionText = "Let us use hoes to reduce the red shell formation.";
+    public const string VoltageCheckDescriptionText = "Check whether the voltage is within the safer limit before working on the red shell formation.";
+    public const string PickUpHoesDescriptionText = "Pick up the hose to reduce the red shell formation.";
+    public const string PlaceHoesPipeDescriptionText = "Place the hoes pipe near the red shell area.";
+    public const string OpenFLRValveDescriptionText = "Open the FLR block valve.";
+    public const string ValveOpenCoolAirDescriptionText = "Now that the valve is open, cool air is released over there.";
+    public const string ObserveRedShellCoolingDescriptionText = "Let us observe the red shell. It still requires more cooling; use hoes to reduce red shell formation.";
+    public const string StartBathPackingDescriptionText = "Let us start bath packing.";
+    public const string SafeDistanceDescriptionText = "Maintain safe distance to avoid splashing of molten bath. Packing is started.";
+    public const string PackingDoneDescriptionText = "Packing is done successfully. The red shell intensity has been reduced.";
+    public const string VoltageSaferLimitRangeDescriptionText = "Check if the voltage is within the safer limit range between 4.1 to 4.3 V.";
+    public const string FinalVerificationDescriptionText = "Now that the leakage and the shell formation is completely stopped you have completed the pot leakage module now close the hood.";
+    public const string FinalCloseHoodDescriptionText = FinalVerificationDescriptionText;
+
+    public const string PTMCraneStatusText = "PTM Crane Arrangement";
+    public const string SideBreakingStatusText = "Side Breaking";
+    public const string ObserveRedShellStatusText = "Observe Red Shell";
+    public const string UseHoesStatusText = "Use Hoes";
+    public const string VoltageCheckStatusText = "Check Safe Voltage";
+    public const string PickUpHoesStatusText = "Pick Up Hose";
+    public const string OpenFLRValveStatusText = "Open FLR Block Valve";
+    public const string ValveOpenCoolAirStatusText = "Cool Air Released";
+    public const string StartBathPackingStatusText = "Bath Packing";
+    public const string SafeDistanceStatusText = "Bath Packing in Progress";
+    public const string PackingDoneStatusText = "Packing Completed";
+    public const string VoltageSaferLimitRangeStatusText = "Verify Safe Voltage";
+    public const string FinalVerificationStatusText = "Pot Leakage Module Completed";
+    public const string FinalCloseHoodStatusText = "Close the Hood";
+
+    public void UpdateUI(string description, string status, int taskNum = 10, int totalTasks = 10, string audioKey = null, string voice = "Technical_Mark")
+    {
+        var ui = ResolvePotLeakageUI();
+        if (ui != null)
+        {
+            ui.UpdateStageUI(description, status, taskNum, totalTasks, audioKey, voice);
+        }
+        else
+        {
+            if (DescriptionText != null)
+            {
+                DescriptionText.gameObject.SetActive(true);
+                DescriptionText.text = description;
+            }
+            if (TitleText != null)
+            {
+                TitleText.gameObject.SetActive(true);
+                TitleText.text = status;
+            }
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(description, audioKey, voice);
+        }
+    }
+
+    [Header("PTM Crane References & Targets")]
+    public GameObject craneTarget;
+    public GameObject cube013Target;
+    public GameObject cylinder003Target;
+    public GameObject cylinderTarget;
+
+    [Header("Plane.045 & Red Shell References")]
+    public GameObject plane045Target;
+    public GameObject plane045_1Target;
+    public Vector3 plane045InitialLocalPosition = new Vector3(-7.33232689f, 0.776885569f, -78.0439987f);
+    public Vector3 plane045TargetLocalPosition = new Vector3(-7.33232689f, 0.776885569f, -78.4199982f);
+    public Vector3 plane045BathPackingStartLocalPosition = new Vector3(-7.33232689f, 0.776885569f, -78.1200027f);
+    public Vector3 plane045BathPackingTargetLocalPosition = new Vector3(-7.33232689f, 0.776885569f, -78.0f);
+    private RedShellController redShellController;
+
+    [Header("Bath Packing Coroutine")]
+    private Coroutine bathPackingAnimationCoroutine = null;
+
+    [Header("Hoe References & Targets")]
+    public GameObject hoeTransformPoint;
+    public GameObject holdSpiral001Target;
+
+    [Header("Hoe Pipe & Electrical Box Targets")]
+    public GameObject holdSpiral001MatTarget;
+    public GameObject holdSpiral002Target;
+    public GameObject electricalBoxHandleTarget;
+    public GameObject electricalBoxEnableTarget;
+    public GameObject coolGasTarget;
+    private Coroutine coolAirToRedShellCoroutine = null;
+
+    public GameObject cube014Target;
+
+    public Vector3 craneInitialPosition = new Vector3(0f, 1.08000004f, -265.506042f);
+    public Vector3 craneTargetPosition = new Vector3(0f, 1.08000004f, -229.360001f);
+    private Quaternion craneInitialRotation = Quaternion.identity;
+    private Vector3 cube013InitialLocalPosition = new Vector3(-6.59000015f, 8.10000038f, -0.879999995f);
+    private Vector3 cube013TargetLocalPosition = new Vector3(-6.59000015f, 0.720000029f, -0.879999995f);
+    private Quaternion cube013InitialLocalRotation = Quaternion.identity;
+    private Vector3 cube014InitialLocalPosition = new Vector3(-6.59000015f, 8.01000023f, -0.879999995f);
+    private Vector3 cube014TargetLocalPosition = new Vector3(-6.59000015f, 5.48000002f, -0.879999995f);
+    private Quaternion cube014InitialLocalRotation = Quaternion.identity;
+    private bool hasCachedCraneInitial = false;
+    private Coroutine ptmCraneAnimationCoroutine = null;
+    private Coroutine waitForVoltageAudioCoroutine = null;
+
+    [Header("PTM Crane Audio")]
+    [SerializeField] private AudioClip craneHumAudioClip;
+    private AudioSource craneHumAudioSource;
+
+    public void StartCraneHumSFX()
+    {
+        if (craneHumAudioClip == null)
+        {
+#if UNITY_EDITOR
+            craneHumAudioClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/CraneHum.wav");
+#endif
+        }
+        if (craneHumAudioClip != null)
+        {
+            var mgr = TruckTyreReplacement.Core.Manager.Instance;
+            if (mgr != null)
+            {
+                craneHumAudioSource = mgr.GetSFXAudioSource();
+            }
+            if (craneHumAudioSource == null)
+            {
+                craneHumAudioSource = GetComponent<AudioSource>();
+            }
+            if (craneHumAudioSource != null)
+            {
+                craneHumAudioSource.clip = craneHumAudioClip;
+                craneHumAudioSource.loop = true;
+                craneHumAudioSource.Play();
+            }
+        }
+    }
+
+    public void StopCraneHumSFX()
+    {
+        if (craneHumAudioSource != null && craneHumAudioSource.clip == craneHumAudioClip)
+        {
+            craneHumAudioSource.Stop();
+            craneHumAudioSource.loop = false;
+            craneHumAudioSource.clip = null;
+        }
+    }
+
+    public GameObject ResolvePlane045Target()
+    {
+        if (plane045Target == null)
+        {
+            var p = GameObject.Find("LINE/line (6)/Plane.045")
+                 ?? GameObject.Find("line (6)/Plane.045")
+                 ?? GameObject.Find("Plane.045");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "Plane.045" && !IsPersistentObject(g))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            plane045Target = p;
+        }
+        return plane045Target;
+    }
+
+    public RedShellController ResolveRedShellController()
+    {
+        if (redShellController != null) return redShellController;
+
+        var p = ResolvePlane045Target();
+        if (p != null)
+        {
+            var child = p.transform.Find("red shell component");
+            if (child != null)
+            {
+                redShellController = child.GetComponent<RedShellController>();
+                if (redShellController == null)
+                {
+                    redShellController = child.gameObject.AddComponent<RedShellController>();
+                }
+            }
+        }
+
+        if (redShellController == null)
+        {
+            redShellController = RedShellController.Instance ?? UnityEngine.Object.FindFirstObjectByType<RedShellController>();
+        }
+
+        return redShellController;
+    }
+
+    public GameObject ResolveRedGameObjectTarget()
+    {
+        var rs = ResolveRedShellController();
+        if (rs != null && rs.redGameObject != null) return rs.redGameObject;
+        var p045 = ResolvePlane045Target();
+        if (p045 != null)
+        {
+            foreach (Transform child in p045.transform)
+            {
+                if (child.name.Equals("red", StringComparison.OrdinalIgnoreCase) || child.name.Equals("Red GameObject", StringComparison.OrdinalIgnoreCase))
+                {
+                    return child.gameObject;
+                }
+            }
+        }
+        var all = Resources.FindObjectsOfTypeAll<GameObject>();
+        for (int i = 0; i < all.Length; i++)
+        {
+            if ((all[i].name == "red" || all[i].name == "Red" || all[i].name == "Red GameObject") && !IsPersistentObject(all[i]))
+            {
+                return all[i];
+            }
+        }
+        return null;
+    }
+
+    public GameObject ResolveCraneTarget()
+    {
+        if (craneTarget == null)
+        {
+            var c = GameObject.Find("crane ");
+            if (c == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "crane " && !IsPersistentObject(g) && g.transform.parent == null)
+                    {
+                        c = g;
+                        break;
+                    }
+                }
+            }
+            craneTarget = c;
+        }
+
+        if (craneTarget != null && !hasCachedCraneInitial)
+        {
+            craneInitialPosition = new Vector3(0f, 1.08000004f, -265.506042f);
+            craneInitialRotation = craneTarget.transform.rotation;
+            var c13 = craneTarget.transform.Find("Cube.013");
+            if (c13 != null)
+            {
+                cube013Target = c13.gameObject;
+                cube013InitialLocalPosition = new Vector3(-6.59000015f, 8.10000038f, -0.879999995f);
+                cube013InitialLocalRotation = Quaternion.Euler(270f, 0f, 0f);
+                var cyl = c13.Find("Cylinder.003");
+                if (cyl != null) cylinder003Target = cyl.gameObject;
+            }
+            var c14 = craneTarget.transform.Find("Cube.014");
+            if (c14 != null)
+            {
+                cube014Target = c14.gameObject;
+                cube014InitialLocalPosition = new Vector3(-6.59000015f, 8.01000023f, -0.879999995f);
+                cube014InitialLocalRotation = c14.localRotation;
+            }
+            hasCachedCraneInitial = true;
+        }
+
+        return craneTarget;
+    }
+
+    public GameObject ResolveCube013Target()
+    {
+        if (cube013Target == null)
+        {
+            var crane = ResolveCraneTarget();
+            if (crane != null)
+            {
+                var c13 = crane.transform.Find("Cube.013");
+                if (c13 != null) cube013Target = c13.gameObject;
+            }
+        }
+        return cube013Target;
+    }
+
+    public GameObject ResolveCube014Target()
+    {
+        if (cube014Target == null)
+        {
+            var crane = ResolveCraneTarget();
+            if (crane != null)
+            {
+                var c14 = crane.transform.Find("Cube.014");
+                if (c14 != null) cube014Target = c14.gameObject;
+            }
+            if (cube014Target == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "Cube.014" && !IsPersistentObject(g))
+                    {
+                        cube014Target = g;
+                        break;
+                    }
+                }
+            }
+        }
+        return cube014Target;
+    }
+
+    public GameObject ResolveCylinder003Target()
+    {
+        if (cylinder003Target == null)
+        {
+            var c13 = ResolveCube013Target();
+            if (c13 != null)
+            {
+                var cyl = c13.transform.Find("Cylinder.003");
+                if (cyl != null) cylinder003Target = cyl.gameObject;
+            }
+        }
+        return cylinder003Target;
+    }
+
+    public void SnapCameraToPTMCrane()
+    {
+        var camCtrl = ResolveCameraController();
+        if (camCtrl != null)
+        {
+            camCtrl.MoveToPTMCrane();
+            return;
+        }
+
+        var tp = GameObject.Find("CameraSystem/TransformPoints/PTM Crane")
+              ?? GameObject.Find("TransformPoints/PTM Crane")
+              ?? GameObject.Find("PTM Crane");
+        if (tp != null)
+        {
+            SnapCameraToTransform(tp.transform);
+        }
+    }
+
+    public GameObject ResolvePlane045_1Target()
+    {
+        if (plane045_1Target == null)
+        {
+            var p = GameObject.Find("LINE/line (6)/Plane.045 (1)")
+                 ?? GameObject.Find("line (6)/Plane.045 (1)")
+                 ?? GameObject.Find("Plane.045 (1)");
+            if (p == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if (g.name == "Plane.045 (1)" && !IsPersistentObject(g))
+                    {
+                        p = g;
+                        break;
+                    }
+                }
+            }
+            plane045_1Target = p;
+        }
+        return plane045_1Target;
+    }
+
+    public void EnsurePlane045_1Material()
+    {
+        var p045_1 = ResolvePlane045_1Target();
+        if (p045_1 != null)
+        {
+            var r = p045_1.GetComponent<MeshRenderer>();
+            if (r != null)
+            {
+                var mat = Resources.Load<Material>("M_Magma_Overflow_Liquid");
+#if UNITY_EDITOR
+                if (mat == null)
+                {
+                    mat = UnityEditor.AssetDatabase.LoadAssetAtPath<Material>("Assets/PotLeakage/Materials/M_Magma_Overflow_Liquid.mat");
+                }
+#endif
+                if (mat != null && r.sharedMaterial != mat)
+                {
+                    r.sharedMaterial = mat;
+                }
+            }
+        }
+    }
+
+    public GameObject ResolveHoeTransformPoint()
+    {
+        if (hoeTransformPoint == null)
+        {
+            hoeTransformPoint = GameObject.Find("CameraSystem/TransformPoints/Hoe")
+                             ?? GameObject.Find("TransformPoints/Hoe")
+                             ?? GameObject.Find("Hoe");
+        }
+        return hoeTransformPoint;
+    }
+
+    public void SnapCameraToHoe()
+    {
+        var hoeTP = ResolveHoeTransformPoint();
+        if (hoeTP != null)
+        {
+            SnapCameraToTransform(hoeTP.transform);
+            Debug.Log("[SequenceHelperFunctions] Camera snapped directly to TransformPoints/Hoe");
+        }
+        else
+        {
+            Debug.LogWarning("[SequenceHelperFunctions] Hoe transform point not found!");
+        }
+    }
+
+    public PotLeakage.Interaction.HoeInteraction ResolveHoeInteraction()
+    {
+        if (holdSpiral001Target == null)
+        {
+            var rp = GameObject.Find("round_PIPES");
+            if (rp != null)
+            {
+                var t = rp.transform.Find("HoldSpiral.001") ?? rp.transform.Find("HoldSpiral.001 ");
+                if (t != null) holdSpiral001Target = t.gameObject;
+            }
+            if (holdSpiral001Target == null)
+            {
+                var all = Resources.FindObjectsOfTypeAll<GameObject>();
+                foreach (var g in all)
+                {
+                    if ((g.name == "HoldSpiral.001" || g.name == "HoldSpiral.001 ") && !IsPersistentObject(g))
+                    {
+                        holdSpiral001Target = g;
+                        break;
+                    }
+                }
+            }
+        }
+        if (holdSpiral001Target != null)
+        {
+            var hi = holdSpiral001Target.GetComponent<PotLeakage.Interaction.HoeInteraction>();
+            if (hi == null) hi = holdSpiral001Target.AddComponent<PotLeakage.Interaction.HoeInteraction>();
+            return hi;
+        }
+        return null;
+    }
+
+    public GameObject ResolveHoldSpiral001Target()
+    {
+        if (holdSpiral001Target == null)
+        {
+            ResolveHoeInteraction();
+        }
+        return holdSpiral001Target;
+    }
+
+    public void SnapToNormalPotOperation()
+    {
+        var camCtrl = ResolveCameraController();
+        if (camCtrl != null)
+        {
+            camCtrl.MoveToNormalPotOperation();
+            return;
+        }
+
+        var tp = GameObject.Find("CameraSystem/TransformPoints/Normal Pot Operation")
+              ?? GameObject.Find("TransformPoints/Normal Pot Operation")
+              ?? GameObject.Find("Normal Pot Operation");
+        if (tp != null)
+        {
+            SnapCameraToTransform(tp.transform);
+        }
+    }
+
+    public void SnapToAirUnlock()
+    {
+        var camCtrl = ResolveCameraController();
+        if (camCtrl != null)
+        {
+            camCtrl.MoveToAirUnlock();
+            return;
+        }
+
+        var tp = GameObject.Find("CameraSystem/TransformPoints/AirUnlock")
+              ?? GameObject.Find("TransformPoints/AirUnlock")
+              ?? GameObject.Find("AirUnlock");
+        if (tp != null)
+        {
+            SnapCameraToTransform(tp.transform);
+        }
+    }
+
+    public GameObject ResolveHoldSpiral001MatTarget()
+    {
+        if (holdSpiral001MatTarget != null) return holdSpiral001MatTarget;
+
+        var matGo = GameObject.Find("HoldSpiral.001 mat");
+        if (matGo == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if (g.name == "HoldSpiral.001 mat" && !IsPersistentObject(g))
+                {
+                    matGo = g;
+                    break;
+                }
+            }
+        }
+        if (matGo != null)
+        {
+            holdSpiral001MatTarget = matGo;
+            var hi = matGo.GetComponent<PotLeakage.Interaction.HoeInteraction>();
+            if (hi == null) hi = matGo.AddComponent<PotLeakage.Interaction.HoeInteraction>();
+            hi.targetType = PotLeakage.Interaction.HoeInteraction.HoeTargetType.PotPlacement;
+        }
+        return holdSpiral001MatTarget;
+    }
+
+    public GameObject ResolveHoldSpiral002Target()
+    {
+        if (holdSpiral002Target != null) return holdSpiral002Target;
+
+        var go = GameObject.Find("HoldSpiral.002");
+        if (go == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if (g.name == "HoldSpiral.002" && !IsPersistentObject(g))
+                {
+                    go = g;
+                    break;
+                }
+            }
+        }
+        holdSpiral002Target = go;
+        return holdSpiral002Target;
+    }
+
+    public GameObject ResolveElectricalBoxHandle()
+    {
+        if (electricalBoxHandleTarget != null) return electricalBoxHandleTarget;
+
+        var eb = GameObject.Find("elect box");
+        if (eb != null)
+        {
+            var h = eb.transform.Find("electrical box handle");
+            if (h != null) electricalBoxHandleTarget = h.gameObject;
+        }
+        if (electricalBoxHandleTarget == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if (g.name == "electrical box handle" && !IsPersistentObject(g))
+                {
+                    electricalBoxHandleTarget = g;
+                    break;
+                }
+            }
+        }
+        if (electricalBoxHandleTarget != null)
+        {
+            var handleComp = electricalBoxHandleTarget.GetComponent<PotLeakage.Interaction.ElectricalBoxHandleInteraction>();
+            if (handleComp == null) handleComp = electricalBoxHandleTarget.AddComponent<PotLeakage.Interaction.ElectricalBoxHandleInteraction>();
+        }
+        return electricalBoxHandleTarget;
+    }
+
+    public GameObject ResolveElectricalBoxEnable()
+    {
+        if (electricalBoxEnableTarget != null) return electricalBoxEnableTarget;
+
+        var eb = GameObject.Find("elect box");
+        if (eb != null)
+        {
+            var e = eb.transform.Find("electrical box enable");
+            if (e != null) electricalBoxEnableTarget = e.gameObject;
+        }
+        if (electricalBoxEnableTarget == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if (g.name == "electrical box enable" && !IsPersistentObject(g))
+                {
+                    electricalBoxEnableTarget = g;
+                    break;
+                }
+            }
+        }
+        return electricalBoxEnableTarget;
+    }
+
+    public ParticleSystem ResolveHoldSpiralCoolGas()
+    {
+        if (coolGasTarget != null) return coolGasTarget.GetComponent<ParticleSystem>();
+
+        var hs2 = ResolveHoldSpiral002Target();
+        if (hs2 != null)
+        {
+            var child = hs2.transform.Find("GasDensity_Fill Cool") 
+                     ?? hs2.transform.Find("Cool/GasDensity_Fill");
+            if (child != null)
+            {
+                coolGasTarget = child.gameObject;
+            }
+        }
+        if (coolGasTarget == null)
+        {
+            var all = Resources.FindObjectsOfTypeAll<GameObject>();
+            foreach (var g in all)
+            {
+                if ((g.name == "GasDensity_Fill Cool" || g.name == "GasDensity_Fill") && !IsPersistentObject(g))
+                {
+                    coolGasTarget = g;
+                    break;
+                }
+            }
+        }
+        return coolGasTarget != null ? coolGasTarget.GetComponent<ParticleSystem>() : null;
+    }
+
+    public void EnsureSideBreakingTool5Active()
+    {
+        var srt5 = ResolveSideBreakingTool5();
+        if (srt5 != null)
+        {
+            if (!srt5.activeSelf) srt5.SetActive(true);
+        }
+    }
+
+    [Header("DustParticle References")]
+    public GameObject dustParticleTarget;
+    private PotLeakage.VFX.DustParticleController dustParticleController;
+
+    public GameObject ResolveDustParticleTarget()
+    {
+        if (dustParticleTarget != null) return dustParticleTarget;
+
+        var c13 = ResolveCube013Target();
+        if (c13 != null)
+        {
+            var dp = c13.transform.Find("DustParticle");
+            if (dp != null)
+            {
+                dustParticleTarget = dp.gameObject;
+                return dustParticleTarget;
+            }
+        }
+
+        var g = GameObject.Find("DustParticle");
+        if (g != null) dustParticleTarget = g;
+        return dustParticleTarget;
+    }
+
+    public PotLeakage.VFX.DustParticleController ResolveDustParticleController()
+    {
+        if (dustParticleController != null) return dustParticleController;
+
+        var dpTarget = ResolveDustParticleTarget();
+        if (dpTarget != null)
+        {
+            dustParticleController = dpTarget.GetComponent<PotLeakage.VFX.DustParticleController>();
+            if (dustParticleController == null)
+            {
+                dustParticleController = dpTarget.AddComponent<PotLeakage.VFX.DustParticleController>();
+            }
+        }
+        else
+        {
+            dustParticleController = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.DustParticleController>();
+        }
+
+        return dustParticleController;
+    }
+
+    public GameObject ResolveCylinderTarget()
+    {
+        if (cylinderTarget != null) return cylinderTarget;
+
+        var c13 = ResolveCube013Target();
+        if (c13 != null)
+        {
+            var cyl = c13.transform.Find("Cylinder");
+            if (cyl != null)
+            {
+                cylinderTarget = cyl.gameObject;
+                return cylinderTarget;
+            }
+        }
+
+        var crane = ResolveCraneTarget();
+        if (crane != null)
+        {
+            var cyl = crane.transform.Find("Cylinder");
+            if (cyl != null)
+            {
+                cylinderTarget = cyl.gameObject;
+                return cylinderTarget;
+            }
+        }
+
+        var g = GameObject.Find("Cylinder");
+        if (g != null && !IsPersistentObject(g))
+        {
+            cylinderTarget = g;
+            return cylinderTarget;
+        }
+
+        var all = Resources.FindObjectsOfTypeAll<GameObject>();
+        foreach (var go in all)
+        {
+            if (go.name == "Cylinder" && !IsPersistentObject(go))
+            {
+                cylinderTarget = go;
+                break;
+            }
+        }
+
+        return cylinderTarget;
+    }
+
+    public void StartDrillVibration()
+    {
+        // Disable drill vibration on Cylinder.003
+        var cyl003 = ResolveCylinder003Target();
+        if (cyl003 != null)
+        {
+            var drill003 = cyl003.GetComponent<PotLeakage.VFX.DrillVibrationController>();
+            if (drill003 != null)
+            {
+                drill003.StopDrilling();
+                drill003.enabled = false;
+            }
+        }
+
+        // Disable drill vibration and rotation shaking on Cylinder
+        var cyl = ResolveCylinderTarget();
+        if (cyl != null)
+        {
+            var drill = cyl.GetComponent<PotLeakage.VFX.DrillVibrationController>();
+            if (drill != null)
+            {
+                drill.StopDrilling();
+                drill.enabled = false;
+            }
+        }
+        else if (PotLeakage.VFX.DrillVibrationController.Instance != null)
+        {
+            PotLeakage.VFX.DrillVibrationController.Instance.StopDrilling();
+            PotLeakage.VFX.DrillVibrationController.Instance.enabled = false;
+        }
+    }
+
+    public void StopDrillVibration()
+    {
+        var cyl003 = ResolveCylinder003Target();
+        if (cyl003 != null)
+        {
+            var drill003 = cyl003.GetComponent<PotLeakage.VFX.DrillVibrationController>();
+            if (drill003 != null)
+            {
+                drill003.StopDrilling();
+                drill003.enabled = false;
+            }
+        }
+
+        var cyl = ResolveCylinderTarget();
+        if (cyl != null)
+        {
+            var drill = cyl.GetComponent<PotLeakage.VFX.DrillVibrationController>();
+            if (drill != null)
+            {
+                drill.StopDrilling();
+                drill.enabled = false;
+            }
+        }
+        else if (PotLeakage.VFX.DrillVibrationController.Instance != null)
+        {
+            PotLeakage.VFX.DrillVibrationController.Instance.StopDrilling();
+            PotLeakage.VFX.DrillVibrationController.Instance.enabled = false;
+        }
+    }
+
+    public void TriggerDustParticleBurst(int count = 10)
+    {
+        var dp = ResolveDustParticleController();
+        if (dp != null)
+        {
+            dp.TriggerBurst(count);
+        }
+    }
+
+    public void ResetPTMCraneState()
+    {
+        task10SubStage = 0;
+        OnInterceptTaskCompletion = null;
+
+        if (ptmCraneAnimationCoroutine != null)
+        {
+            if (Application.isPlaying) StopCoroutine(ptmCraneAnimationCoroutine);
+            ptmCraneAnimationCoroutine = null;
+        }
+
+        StopDrillVibration();
+
+        var crane = ResolveCraneTarget();
+        if (crane != null)
+        {
+            crane.transform.position = craneInitialPosition;
+            crane.transform.rotation = craneInitialRotation;
+        }
+
+        var c13 = ResolveCube013Target();
+        if (c13 != null)
+        {
+            c13.transform.localPosition = cube013InitialLocalPosition;
+            c13.transform.localRotation = cube013InitialLocalRotation;
+        }
+
+        var cyl = ResolveCylinder003Target();
+        if (cyl != null)
+        {
+            cyl.SetActive(false);
+            var drill = cyl.GetComponent<PotLeakage.VFX.DrillVibrationController>();
+            if (drill != null) drill.RestoreOriginalTransforms();
+        }
+
+        var dp = ResolveDustParticleController();
+        if (dp != null)
+        {
+            dp.ResetDust();
+        }
+
+        var p045 = ResolvePlane045Target();
+        if (p045 != null)
+        {
+            p045.transform.localPosition = plane045InitialLocalPosition;
+        }
+
+        var redShell = ResolveRedShellController();
+        if (redShell != null)
+        {
+            redShell.ResetRedShell();
+            redShell.gameObject.SetActive(false);
+        }
+
+        var pipesCtrl = CoolingPipesController.Instance ?? UnityEngine.Object.FindFirstObjectByType<CoolingPipesController>();
+        if (pipesCtrl != null)
+        {
+            pipesCtrl.StopGasDissipation();
+        }
+
+        DeactivateCoolingPipes();
+
+        if (coolAirToRedShellCoroutine != null)
+        {
+            if (Application.isPlaying) StopCoroutine(coolAirToRedShellCoroutine);
+            coolAirToRedShellCoroutine = null;
+        }
+
+        var hi = ResolveHoeInteraction();
+        if (hi != null)
+        {
+            hi.RestoreOriginalMaterial();
+            hi.SetHighlight(false);
+        }
+        if (holdSpiral001Target != null) holdSpiral001Target.SetActive(true);
+
+        var matGo = ResolveHoldSpiral001MatTarget();
+        if (matGo != null)
+        {
+            var matHi = matGo.GetComponent<PotLeakage.Interaction.HoeInteraction>();
+            if (matHi != null)
+            {
+                matHi.RestoreOriginalMaterial();
+                matHi.SetHighlight(false);
+            }
+            matGo.SetActive(false);
+        }
+
+        var redShellCtrl = ResolveRedShellController();
+        if (redShellCtrl != null)
+        {
+            redShellCtrl.ResolveRedGameObject();
+        }
+
+        var hs2 = ResolveHoldSpiral002Target();
+        if (hs2 != null) hs2.SetActive(false);
+
+        var handleGo = ResolveElectricalBoxHandle();
+        if (handleGo != null)
+        {
+            var handleHi = handleGo.GetComponent<PotLeakage.Interaction.ElectricalBoxHandleInteraction>();
+            if (handleHi != null) handleHi.SetHighlight(false);
+            handleGo.SetActive(true);
+        }
+
+        var enableGo = ResolveElectricalBoxEnable();
+        if (enableGo != null) enableGo.SetActive(false);
+
+        var coolGas = ResolveHoldSpiralCoolGas();
+        if (coolGas != null)
+        {
+            coolGas.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            coolGas.gameObject.SetActive(false);
+        }
+
+        DeactivatePipes1();
+        var p2Reset = ResolvePipes2Target();
+        if (p2Reset != null) p2Reset.SetActive(false);
+
+        var c51 = ResolveCube051Target();
+        if (c51 != null)
+        {
+            var pw = ResolveBathPowderController();
+            if (pw != null) pw.ResetPowder();
+            c51.transform.localPosition = cube051InitialLocalPosition;
+            c51.SetActive(false);
+        }
+
+        if (bathPackingAnimationCoroutine != null)
+        {
+            if (Application.isPlaying) StopCoroutine(bathPackingAnimationCoroutine);
+            bathPackingAnimationCoroutine = null;
+        }
+
+        EnsureHoodPanelsOpen();
+    }
+
+    public void BeginPTMCranePreparation()
+    {
+        ResolveCraneTarget();
+        ResolveCube013Target();
+        ResolveCylinder003Target();
+        ResolveDustParticleController();
+        ResolvePlane045Target();
+        ResolveRedShellController();
+        EnsureHoodPanelsOpen();
+
+        // 1. Camera snap to TransformPoints/PTM Crane (instant snap, zero pan)
+        SnapCameraToPTMCrane();
+
+        // Ensure SIDEREAKING TOOL (5) remains active and visible
+        var tool5 = ResolveSideBreakingTool5();
+        if (tool5 != null) tool5.SetActive(true);
+
+        // Ensure cooling gas is active and running at intensified rate
+        var pipesCtrl = CoolingPipesController.Instance ?? UnityEngine.Object.FindFirstObjectByType<CoolingPipesController>();
+        if (pipesCtrl != null)
+        {
+            pipesCtrl.IntensifyCoolingGas();
+        }
+
+        // 2. Normal UI update
+        var ui = ResolvePotLeakageUI();
+        if (ui != null)
+        {
+            if (ui.welcomePanel != null) ui.welcomePanel.SetActive(true);
+            if (ui.titleText != null) ui.titleText.text = "PTM Crane Preparation";
+            if (ui.statusText != null)
+            {
+                ui.statusText.gameObject.SetActive(true);
+                ui.statusText.text = "ARRANGE PTM CRANE";
+            }
+            if (ui.descriptionText != null)
+            {
+                ui.descriptionText.gameObject.SetActive(true);
+                ui.descriptionText.text = PTMCraneDescriptionText;
+            }
+            if (ui.nextButton != null) ui.nextButton.gameObject.SetActive(true);
+
+            if (ui.valueDisplay != null)
+            {
+                ui.valueDisplay.SetTitle("PTM Crane Preparation");
+                ui.valueDisplay.DisplayNormalStatus("ARRANGE PTM CRANE");
+                ui.valueDisplay.HideValueDisplay();
+            }
+        }
+
+        // Setup Task 10 progression interception
+        task10SubStage = 0;
+        OnInterceptTaskCompletion = HandleTask10ProgressionIntercept;
+
+        // 3. Physical visible movement
+        if (Application.isPlaying)
+        {
+            if (ptmCraneAnimationCoroutine != null) StopCoroutine(ptmCraneAnimationCoroutine);
+            ptmCraneAnimationCoroutine = StartCoroutine(AnimatePTMCraneAndPusherRoutine());
+        }
+        else
+        {
+            // Edit Mode / test runner: set final targets directly
+            if (craneTarget != null) craneTarget.transform.position = craneTargetPosition;
+            if (cube013Target != null)
+            {
+                cube013Target.transform.localPosition = new Vector3(-6.91900015f, 1.02999997f, -0.879999995f);
+                cube013Target.transform.localRotation = Quaternion.Euler(270f, 0f, 0f);
+            }
+            if (cube014Target != null) cube014Target.transform.localPosition = cube014TargetLocalPosition;
+            if (cylinder003Target != null) cylinder003Target.SetActive(false);
+            StopDrillVibration();
+            var dp = ResolveDustParticleController();
+            if (dp != null) dp.InitializeComponents();
+            var p045 = ResolvePlane045Target();
+            if (p045 != null) p045.transform.localPosition = plane045TargetLocalPosition;
+            var redShell = ResolveRedShellController();
+            if (redShell != null)
+            {
+                redShell.gameObject.SetActive(true);
+                redShell.StartFormation(2.0f);
+            }
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(PTMCraneDescriptionText, "TASK_10_PTM_CRANE", "Technical_Mark");
+        }
+
+        Debug.Log("[PotLeakage] PTM Crane Preparation stage begun.");
+    }
+
+    private IEnumerator AnimatePTMCraneAndPusherRoutine()
+    {
+        int myVersion = ++voicePlaybackVersion;
+        var crane = ResolveCraneTarget();
+        var c13 = ResolveCube013Target();
+        var c14 = ResolveCube014Target();
+        var cyl = ResolveCylinder003Target();
+        var p045 = ResolvePlane045Target();
+        var redShell = ResolveRedShellController();
+
+        // Ensure start state
+        if (crane != null) crane.transform.position = craneInitialPosition;
+        if (c13 != null) c13.transform.localPosition = new Vector3(-6.17000008f, 1.02999997f, -0.879999995f);
+        if (c14 != null) c14.transform.localPosition = cube014InitialLocalPosition;
+        if (cyl != null) cyl.SetActive(false);
+        StopDrillVibration();
+        if (p045 != null) p045.transform.localPosition = plane045InitialLocalPosition;
+        if (redShell != null)
+        {
+            redShell.ResetRedShell();
+            redShell.gameObject.SetActive(false);
+        }
+
+        SnapCameraToPTMCrane();
+
+        yield return new WaitForSeconds(0.2f);
+        if (myVersion != voicePlaybackVersion) yield break;
+
+        // Step 1: ONE combined description + ONE combined voice-over:
+        // "The intensity is reduced but not stopped. Let us arrange PTM crane for pot breaking process, and the bath bin is also arranged by forklift."
+        var ui = ResolvePotLeakageUI();
+        if (ui != null)
+        {
+            if (ui.descriptionText != null)
+            {
+                ui.descriptionText.gameObject.SetActive(true);
+                ui.descriptionText.text = PTMCraneDescriptionText;
+            }
+            ui.SpeakDescriptionText(PTMCraneDescriptionText, "TASK_10_PTM_CRANE", "Technical_Mark");
+        }
+        else
+        {
+            TruckTyreReplacement.Core.Manager.Instance?.SpeakText(PTMCraneDescriptionText, "TASK_10_PTM_CRANE", "Technical_Mark");
+        }
+
+        // Step 2: CRANE TRAVEL FIRST (8–12 seconds, 9.0s)
+        // Crane: (0, 1.08000004, -265.506042) -> (0, 1.08000004, -229.360001)
+        // Cube.013 and Cube.014 DO NOT move yet!
+        StartCraneHumSFX();
+        float craneDuration = 9.0f;
+        float elapsedCrane = 0f;
+        while (elapsedCrane < craneDuration)
+        {
+            if (myVersion != voicePlaybackVersion)
+            {
+                StopCraneHumSFX();
+                yield break;
+            }
+            elapsedCrane += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsedCrane / craneDuration);
+            float smooth = Mathf.SmoothStep(0f, 1f, t);
+
+            if (crane != null)
+            {
+                float z = Mathf.Lerp(craneInitialPosition.z, craneTargetPosition.z, smooth);
+                crane.transform.position = new Vector3(craneInitialPosition.x, craneInitialPosition.y, z);
+            }
+            yield return null;
+        }
+
+        StopCraneHumSFX();
+
+        if (myVersion != voicePlaybackVersion) yield break;
+        if (crane != null) crane.transform.position = craneTargetPosition;
+
+        Debug.Log("[PotLeakage] Crane reached target position (0, 1.08000004, -229.360001).");
+
+        // Step 3: SNAP CAMERA TO Normal Pot AFTER crane has completely reached target
+        SnapToNormalPot();
+
+        yield return new WaitForSeconds(0.3f);
+        if (myVersion != voicePlaybackVersion) yield break;
+
+        // Step 4: ONLY AFTER CAMERA IS AT NORMAL POT -> Move Cube.014 downward
+        float pusherDuration = 2.5f;
+        float elapsedPusher = 0f;
+        while (elapsedPusher < pusherDuration)
+        {
+            if (myVersion != voicePlaybackVersion) yield break;
+            elapsedPusher += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsedPusher / pusherDuration);
+            float smooth = Mathf.SmoothStep(0f, 1f, t);
+
+            if (c14 != null)
+            {
+                float y = Mathf.Lerp(cube014InitialLocalPosition.y, cube014TargetLocalPosition.y, smooth);
+                c14.transform.localPosition = new Vector3(cube014InitialLocalPosition.x, y, cube014InitialLocalPosition.z);
+            }
+            yield return null;
+        }
+
+        if (myVersion != voicePlaybackVersion) yield break;
+        if (c14 != null) c14.transform.localPosition = cube014TargetLocalPosition;
+
+        // Side breaking voice
+        UpdateUI(SideBreakingDescriptionText, SideBreakingStatusText, 10, 10, "TASK_10_SIDE_BREAKING", "Technical_Mark");
+
+        // Step 5: Cube.013 THREE WORKING DRILL-LIKE PASSES (Whole tool horizontal + subtle vertical + whole-tool vibration)
+        if (c13 != null)
+        {
+            yield return StartCoroutine(ExecuteCube013DrillingMotionRoutine(c13, myVersion));
+        }
+
+        if (myVersion != voicePlaybackVersion) yield break;
+
+        // Controlled GasPoint white gas remains active
+        var pipes = CoolingPipesController.Instance ?? UnityEngine.Object.FindFirstObjectByType<CoolingPipesController>();
+        if (pipes != null)
+        {
+            pipes.IntensifyCoolingGas();
+        }
+
+        yield return new WaitForSeconds(0.4f);
+        if (myVersion != voicePlaybackVersion) yield break;
+
+        // Step 6: Plane.045 instantaneous SNAP directly to target position (-78.4199982)
+        if (p045 == null) p045 = ResolvePlane045Target();
+        if (p045 != null)
+        {
+            p045.transform.localPosition = plane045TargetLocalPosition;
+        }
+
+        EnsurePlane045_1Material();
+        EnsureSideBreakingTool5Active();
+
+        // Step 7: Enable existing red shell component under Plane.045 and start gradual formation over 2.0s
+        if (redShell == null) redShell = ResolveRedShellController();
+        if (redShell != null)
+        {
+            redShell.gameObject.SetActive(true);
+            redShell.StartFormation(2.0f);
+        }
+
+        // Wait until formation visually completes before playing voice!
+        yield return new WaitForSeconds(2.0f);
+        if (myVersion != voicePlaybackVersion) yield break;
+
+        // Step 8: Red shell established.
+        // VO: "Observe the red shell formation in the shell."
+        task10SubStage = 1;
+        UpdateUI(ObserveRedShellDescriptionText, ObserveRedShellStatusText, 10, 10, "TASK_10_OBSERVE_RED_SHELL", "Technical_Mark");
+
+        // Gas gradually weakens over 6.0s now that red shell formation has established
+        if (pipes != null)
+        {
+            pipes.StartGasDissipation(6.0f);
+        }
+
+        // Setup Task 10 Next progression interception for subsequent stages
+        OnInterceptTaskCompletion = HandleTask10ProgressionIntercept;
+
+        ptmCraneAnimationCoroutine = null;
+    }
+
+    private IEnumerator ExecuteCube013DrillingMotionRoutine(GameObject c13, int capturedVersion)
+    {
+        if (c13 == null) yield break;
+
+        c13.SetActive(true);
+
+        // 1. Particle effect starts IMMEDIATELY at movement start
+        var dp = ResolveDustParticleController();
+        if (dp != null)
+        {
+            dp.PlayDust();
+            dp.TriggerBurst(10);
+        }
+
+        Vector3 p1Start = new Vector3(-6.17000008f, 1.02999997f, -0.879999995f);
+        Vector3 p1End   = new Vector3(-6.54199982f, 1.02999997f, -0.879999995f);
+        Vector3 p2Start = new Vector3(-7.23699999f, 1.02999997f, -0.879999995f);
+        Vector3 p2End   = new Vector3(-6.65399981f, 1.02999997f, -0.879999995f);
+        Vector3 p3Start = new Vector3(-6.53599977f, 1.02999997f, -0.879999995f);
+        Vector3 p3End   = new Vector3(-6.91900015f, 1.02999997f, -0.879999995f);
+
+        Quaternion baseRot = Quaternion.Euler(270f, 0f, 0f);
+        c13.transform.localPosition = p1Start;
+        c13.transform.localRotation = baseRot;
+
+        float totalTime = 0f;
+        const float vibFreq = 8f;       // 8 Hz mechanical contact vibration
+        const float vibPosAmp = 0.005f; // ~5mm whole-tool vibration
+        const float vibRotAmp = 0.45f;  // ~0.45 deg tilt vibration
+        const float vertAmp = 0.022f;   // ~22mm subtle vertical wave
+
+        // PASS 1: p1Start -> p1End (Smooth, slow drilling feed)
+        float pass1Duration = 2.0f;
+        float elapsed = 0f;
+        while (elapsed < pass1Duration)
+        {
+            if (capturedVersion != voicePlaybackVersion) yield break;
+            elapsed += Time.deltaTime;
+            totalTime += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / pass1Duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+            float x = Mathf.Lerp(p1Start.x, p1End.x, smoothT);
+            float yOffset = Mathf.Sin(smoothT * Mathf.PI * 2f) * vertAmp;
+            float vibX = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * vibPosAmp;
+            float vibY = Mathf.Cos(totalTime * vibFreq * Mathf.PI * 2f) * (vibPosAmp * 0.6f);
+            float vibRot = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * vibRotAmp;
+
+            c13.transform.localPosition = new Vector3(x + vibX, p1Start.y + yOffset + vibY, p1Start.z);
+            c13.transform.localRotation = baseRot * Quaternion.Euler(0f, 0f, vibRot);
+            yield return null;
+        }
+
+        // TRANSITION 1->2: Smooth continuous repositioning blend (no teleport / no snap)
+        float trans1Duration = 0.8f;
+        elapsed = 0f;
+        while (elapsed < trans1Duration)
+        {
+            if (capturedVersion != voicePlaybackVersion) yield break;
+            elapsed += Time.deltaTime;
+            totalTime += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / trans1Duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+            float x = Mathf.Lerp(p1End.x, p2Start.x, smoothT);
+            float y = Mathf.Lerp(p1End.y, p2Start.y, smoothT);
+            float vibX = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * (vibPosAmp * 0.5f);
+            float vibRot = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * (vibRotAmp * 0.5f);
+
+            c13.transform.localPosition = new Vector3(x + vibX, y, p1Start.z);
+            c13.transform.localRotation = baseRot * Quaternion.Euler(0f, 0f, vibRot);
+            yield return null;
+        }
+
+        // PASS 2: p2Start -> p2End
+        float pass2Duration = 2.0f;
+        elapsed = 0f;
+        while (elapsed < pass2Duration)
+        {
+            if (capturedVersion != voicePlaybackVersion) yield break;
+            elapsed += Time.deltaTime;
+            totalTime += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / pass2Duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+            float x = Mathf.Lerp(p2Start.x, p2End.x, smoothT);
+            float yOffset = Mathf.Sin(smoothT * Mathf.PI * 2f) * vertAmp;
+            float vibX = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * vibPosAmp;
+            float vibY = Mathf.Cos(totalTime * vibFreq * Mathf.PI * 2f) * (vibPosAmp * 0.6f);
+            float vibRot = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * vibRotAmp;
+
+            c13.transform.localPosition = new Vector3(x + vibX, p2Start.y + yOffset + vibY, p2Start.z);
+            c13.transform.localRotation = baseRot * Quaternion.Euler(0f, 0f, vibRot);
+            yield return null;
+        }
+
+        // TRANSITION 2->3: Smooth continuous repositioning blend (no teleport / no snap)
+        float trans2Duration = 0.6f;
+        elapsed = 0f;
+        while (elapsed < trans2Duration)
+        {
+            if (capturedVersion != voicePlaybackVersion) yield break;
+            elapsed += Time.deltaTime;
+            totalTime += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / trans2Duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+            float x = Mathf.Lerp(p2End.x, p3Start.x, smoothT);
+            float y = Mathf.Lerp(p2End.y, p3Start.y, smoothT);
+            float vibX = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * (vibPosAmp * 0.5f);
+            float vibRot = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * (vibRotAmp * 0.5f);
+
+            c13.transform.localPosition = new Vector3(x + vibX, y, p2Start.z);
+            c13.transform.localRotation = baseRot * Quaternion.Euler(0f, 0f, vibRot);
+            yield return null;
+        }
+
+        // PASS 3: p3Start -> p3End
+        float pass3Duration = 2.0f;
+        elapsed = 0f;
+        while (elapsed < pass3Duration)
+        {
+            if (capturedVersion != voicePlaybackVersion) yield break;
+            elapsed += Time.deltaTime;
+            totalTime += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / pass3Duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+            float x = Mathf.Lerp(p3Start.x, p3End.x, smoothT);
+            float yOffset = Mathf.Sin(smoothT * Mathf.PI * 2f) * vertAmp;
+            float vibX = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * vibPosAmp;
+            float vibY = Mathf.Cos(totalTime * vibFreq * Mathf.PI * 2f) * (vibPosAmp * 0.6f);
+            float vibRot = Mathf.Sin(totalTime * vibFreq * Mathf.PI * 2f) * vibRotAmp;
+
+            c13.transform.localPosition = new Vector3(x + vibX, p3Start.y + yOffset + vibY, p3Start.z);
+            c13.transform.localRotation = baseRot * Quaternion.Euler(0f, 0f, vibRot);
+            yield return null;
+        }
+
+        // SETTLE & SMOOTH DECELERATION (Gradual ease-out to zero vibration, settle naturally)
+        float settleDuration = 0.5f;
+        elapsed = 0f;
+        Vector3 settleStart = c13.transform.localPosition;
+        Quaternion rotStart = c13.transform.localRotation;
+        while (elapsed < settleDuration)
+        {
+            if (capturedVersion != voicePlaybackVersion) yield break;
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / settleDuration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+            c13.transform.localPosition = Vector3.Lerp(settleStart, p3End, smoothT);
+            c13.transform.localRotation = Quaternion.Slerp(rotStart, baseRot, smoothT);
+            yield return null;
+        }
+
+        c13.transform.localPosition = p3End;
+        c13.transform.localRotation = baseRot;
+        c13.transform.eulerAngles = new Vector3(270f, 0f, 0f);
+
+        // Particle effect smoothly stops only after movement is complete
+        if (dp != null) dp.StopDust();
+    }
+
+    private int task10SubStage = 0;
+
+    public bool HandleTask10ProgressionIntercept()
+    {
+        ResolveHandler();
+        if (handler != null && handler.currentTask != 9)
+        {
+            task10SubStage = 0;
+            OnInterceptTaskCompletion = null;
+            return false;
+        }
+
+        var ui = ResolvePotLeakageUI();
+        if (task10SubStage == 0)
+        {
+            // Early click during PTM crane: fast-forward physical state to established red shell
+            task10SubStage = 1;
+            if (ptmCraneAnimationCoroutine != null)
+            {
+                StopCoroutine(ptmCraneAnimationCoroutine);
+                ptmCraneAnimationCoroutine = null;
+            }
+            var crane = ResolveCraneTarget();
+            if (crane != null) crane.transform.position = craneTargetPosition;
+            var c14 = ResolveCube014Target();
+            if (c14 != null) c14.transform.localPosition = cube014TargetLocalPosition;
+            var c13 = ResolveCube013Target();
+            if (c13 != null)
+            {
+                c13.transform.localPosition = new Vector3(-6.91900015f, 1.02999997f, -0.879999995f);
+                c13.transform.localRotation = Quaternion.Euler(270f, 0f, 0f);
+            }
+            var cyl = ResolveCylinder003Target();
+            if (cyl != null) cyl.SetActive(false);
+            StopDrillVibration();
+            var dp = ResolveDustParticleController();
+            if (dp != null) dp.InitializeComponents();
+            var p045 = ResolvePlane045Target();
+            if (p045 != null) p045.transform.localPosition = plane045TargetLocalPosition;
+            EnsurePlane045_1Material();
+            EnsureSideBreakingTool5Active();
+            var rs = ResolveRedShellController();
+            if (rs != null)
+            {
+                rs.gameObject.SetActive(true);
+                rs.formationProgress = 1.0f;
+                rs.UpdateVisuals();
+            }
+            SnapToNormalPot();
+
+            UpdateUI(ObserveRedShellDescriptionText, ObserveRedShellStatusText, 10, 10, "TASK_10_OBSERVE_RED_SHELL", "Technical_Mark");
+            return true;
+        }
+        else if (task10SubStage == 1)
+        {
+            // Trainee clicks Next on Observe Red Shell:
+            // Progression: "Let us use hoes to reduce the red shell formation."
+            task10SubStage = 2;
+            EnsureSideBreakingTool5Active();
+            EnsurePlane045_1Material();
+
+            UpdateUI(UseHoesDescriptionText, UseHoesStatusText, 10, 10, "TASK_10_USE_HOES", "Technical_Mark");
+            Debug.Log("[SequenceHelperFunctions] Task 10: Step 2 'Let us use hoes to reduce the red shell formation.' played.");
+            return true;
+        }
+        else if (task10SubStage == 2)
+        {
+            // Trainee clicks Next on Use Hoes:
+            // Camera snaps directly to TransformPoints/PotControlMachine
+            task10SubStage = 3;
+            var camCtrl = ResolveCameraController();
+            if (camCtrl != null)
+            {
+                camCtrl.MoveToPotControlMachine();
+            }
+            else
+            {
+                var pcm = GameObject.Find("CameraSystem/TransformPoints/PotControlMachine") ?? GameObject.Find("TransformPoints/PotControlMachine");
+                if (pcm != null) SnapCameraToTransform(pcm.transform);
+            }
+
+            UpdateUI(VoltageCheckDescriptionText, VoltageCheckStatusText, 10, 10, "TASK_10_VOLTAGE_CHECK", "Technical_Mark");
+
+            Debug.Log("[SequenceHelperFunctions] Task 10: Snapped to PotControlMachine and voltage check voice played. Waiting for audio to finish or Next click.");
+
+            if (waitForVoltageAudioCoroutine != null) StopCoroutine(waitForVoltageAudioCoroutine);
+            if (Application.isPlaying)
+            {
+                waitForVoltageAudioCoroutine = StartCoroutine(WaitForVoltageAudioOrAdvanceRoutine(voicePlaybackVersion));
+            }
+            return true;
+        }
+        else if (task10SubStage == 3)
+        {
+            // Trainee clicked Next early during voltage check speech:
+            if (waitForVoltageAudioCoroutine != null)
+            {
+                StopCoroutine(waitForVoltageAudioCoroutine);
+                waitForVoltageAudioCoroutine = null;
+            }
+            TransitionToHoeStage();
+            return true;
+        }
+        else if (task10SubStage == 4)
+        {
+            // Currently at Hoe rack stage, waiting for trainee to click round_PIPES/HoldSpiral.001
+            Debug.Log("[SequenceHelperFunctions] Trainee must click round_PIPES/HoldSpiral.001 to pick up the hose.");
+            return true;
+        }
+        else if (task10SubStage == 5)
+        {
+            // Currently at AirUnlock stage, waiting for trainee to click electrical box handle
+            Debug.Log("[SequenceHelperFunctions] Trainee must click electrical box handle to open the FLR block valve.");
+            return true;
+        }
+        else if (task10SubStage == 6)
+        {
+            // Currently at PIPES (2) highlight stage, waiting for trainee to click PIPES (2)
+            Debug.Log("[SequenceHelperFunctions] Trainee must click PIPES (2) to proceed with cooling.");
+            return true;
+        }
+        else if (task10SubStage == 7)
+        {
+            // Trainee clicked Next on 'Let us start bath packing.' -> Start bath packing visual!
+            StartBathPackingSequence();
+            return true;
+        }
+        else if (task10SubStage == 8)
+        {
+            // Trainee clicked Next on 'Packing is done successfully.' -> Move to PotControlMachine safety check
+            if (bathPackingAnimationCoroutine != null)
+            {
+                StopCoroutine(bathPackingAnimationCoroutine);
+                bathPackingAnimationCoroutine = null;
+            }
+            var c51 = ResolveCube051Target();
+            if (c51 != null) c51.transform.localPosition = cube051TargetLocalPosition;
+            var powder = ResolveBathPowderController();
+            if (powder != null) powder.PlayPowder();
+            var p045 = ResolvePlane045Target();
+            if (p045 != null) p045.transform.localPosition = plane045BathPackingTargetLocalPosition;
+
+            TransitionToBathPackingVoltageCheck();
+            return true;
+        }
+        else if (task10SubStage == 9)
+        {
+            // Trainee clicked Next on 'Check if the voltage is within the safer limit range between 4.1 to 4.3 V.' -> Move to Final Normal Pot verification
+            TransitionToFinalNormalPotVerification();
+            return true;
+        }
+        else if (task10SubStage >= 10)
+        {
+            if (!isFinalHoodClosingCompleted)
+            {
+                Debug.Log("[SequenceHelperFunctions] Task 10: Trainee must close the hood before completing the module.");
+                return true;
+            }
+
+            // Trainee clicked Next after hood is closed -> Complete Task 10!
+            task10SubStage = 0;
+            OnInterceptTaskCompletion = null;
+            return false;
+        }
+
+        return false;
+    }
+
+    private IEnumerator WaitForVoltageAudioOrAdvanceRoutine(int capturedVersion)
+    {
+        yield return new WaitForSeconds(0.5f);
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        while (mgr != null && mgr.IsSpeaking && capturedVersion == voicePlaybackVersion && task10SubStage == 3)
+        {
+            yield return null;
+        }
+
+        if (capturedVersion != voicePlaybackVersion || task10SubStage != 3) yield break;
+
+        yield return new WaitForSeconds(0.2f);
+        if (capturedVersion != voicePlaybackVersion || task10SubStage != 3) yield break;
+
+        Debug.Log("[SequenceHelperFunctions] Voltage check audio finished naturally. Auto-transitioning to Hoe stage.");
+        TransitionToHoeStage();
+    }
+
+    public enum HoldSpiralVisualState
+    {
+        StateA_BeforeHoe,
+        StateB_CameraAtHoe,
+        StateC_HoeInteraction,
+        StateD_CameraAtNormalPotOperation,
+        StateE_ClickedAndDisabled
+    }
+
+    public void ApplyHoldSpiralState(HoldSpiralVisualState state)
+    {
+        var hs001 = ResolveHoldSpiral001Target();
+        var hsRackHi = hs001 != null ? hs001.GetComponent<PotLeakage.Interaction.HoeInteraction>() : null;
+        var hsPotGo = ResolveHoldSpiral001MatTarget();
+
+        switch (state)
+        {
+            case HoldSpiralVisualState.StateB_CameraAtHoe:
+                // Camera at Hoe:
+                // holdSpiral001Target at round_PIPES:
+                // ACTIVE, MESH VISIBLE, ORIGINAL MATERIAL VISIBLE
+                if (hs001 != null)
+                {
+                    hs001.SetActive(true);
+                    if (hsRackHi != null)
+                    {
+                        hsRackHi.InitializeComponents();
+                        hsRackHi.RestoreOriginalMaterial();
+                        hsRackHi.LogDiagnosticState("StateB_CameraAtHoe");
+                    }
+                }
+                if (hsPotGo != null) hsPotGo.SetActive(false);
+                break;
+
+            case HoldSpiralVisualState.StateC_HoeInteraction:
+                // Hoe Interaction:
+                // holdSpiral001Target: ACTIVE, MESH VISIBLE, highlight yellow
+                if (hs001 != null)
+                {
+                    hs001.SetActive(true);
+                    if (hsRackHi != null)
+                    {
+                        hsRackHi.SetHighlight(true);
+                        hsRackHi.LogDiagnosticState("StateC_HoeInteraction");
+                    }
+                }
+                if (hsPotGo != null) hsPotGo.SetActive(false);
+                break;
+
+            case HoldSpiralVisualState.StateD_CameraAtNormalPotOperation:
+            case HoldSpiralVisualState.StateE_ClickedAndDisabled:
+                // HoldSpiral.001 clicked: disabled, no highlight, original material restored
+                if (hs001 != null)
+                {
+                    if (hsRackHi != null)
+                    {
+                        hsRackHi.SetHighlight(false);
+                        hsRackHi.RestoreOriginalMaterial();
+                    }
+                    hs001.SetActive(false);
+                }
+
+                if (hsPotGo != null)
+                {
+                    var potHi = hsPotGo.GetComponent<PotLeakage.Interaction.HoeInteraction>();
+                    if (potHi != null)
+                    {
+                        potHi.SetHighlight(false);
+                        potHi.RestoreOriginalMaterial();
+                    }
+                    hsPotGo.SetActive(false);
+                }
+                break;
+        }
+    }
+
+    public void EnsureProcessParticlesActive()
+    {
+        var moltenCtrl = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenAluminiumVFXController>();
+        if (moltenCtrl != null && moltenCtrl.streamParticles != null && moltenCtrl.streamParticles.particleSys != null && !moltenCtrl.streamParticles.particleSys.isPlaying)
+        {
+            moltenCtrl.streamParticles.particleSys.Play(true);
+        }
+        var smoke = GameObject.Find("Smoke") ?? GameObject.Find("smoke");
+        if (smoke != null)
+        {
+            var smokePS = smoke.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var ps in smokePS)
+            {
+                if (ps != null && !ps.isPlaying) ps.Play(true);
+            }
+        }
+        var dp = ResolveDustParticleController();
+        if (dp != null && dp.dustParticleSystem != null && !dp.dustParticleSystem.isPlaying)
+        {
+            dp.dustParticleSystem.Play(true);
+        }
+    }
+
+    public void EnsureRedShellObservationParticlesActive()
+    {
+        // 1. PIPES/GasDensity_Fill & GasPoint systems
+        var pipes = ResolvePipesTarget();
+        if (pipes != null)
+        {
+            if (!pipes.activeSelf) pipes.SetActive(true);
+            var pipesCtrl = pipes.GetComponent<CoolingPipesController>();
+            if (pipesCtrl != null)
+            {
+                pipesCtrl.isCoolingActive = true;
+                pipesCtrl.IntensifyCoolingGas();
+            }
+            var pipesPS = pipes.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var ps in pipesPS)
+            {
+                if (ps != null)
+                {
+                    if (!ps.gameObject.activeSelf) ps.gameObject.SetActive(true);
+                    if (!ps.isPlaying) ps.Play(true);
+                }
+            }
+        }
+
+        // 2. Cool/GasDensity_Fill (HoldSpiral.002) - keep HoldSpiral.002 permanently disabled
+        var hs2 = ResolveHoldSpiral002Target();
+        if (hs2 != null) hs2.SetActive(false);
+        var coolGas = ResolveHoldSpiralCoolGas();
+        if (coolGas != null)
+        {
+            coolGas.transform.localEulerAngles = new Vector3(72.3570251f, 250.899704f, 252.822556f);
+            if (!coolGas.gameObject.activeSelf) coolGas.gameObject.SetActive(true);
+            if (!coolGas.isPlaying) coolGas.Play(true);
+        }
+
+
+        // 4. Existing molten leakage particle effect
+        var moltenCtrl = UnityEngine.Object.FindFirstObjectByType<PotLeakage.VFX.MoltenAluminiumVFXController>();
+        if (moltenCtrl != null)
+        {
+            if (!moltenCtrl.gameObject.activeSelf) moltenCtrl.gameObject.SetActive(true);
+            if (moltenCtrl.streamParticles != null && moltenCtrl.streamParticles.particleSys != null && !moltenCtrl.streamParticles.particleSys.isPlaying)
+            {
+                moltenCtrl.streamParticles.particleSys.Play(true);
+            }
+        }
+
+        // 5. Existing smoke effect
+        var smoke = GameObject.Find("Smoke") ?? GameObject.Find("smoke");
+        if (smoke != null)
+        {
+            if (!smoke.activeSelf) smoke.SetActive(true);
+            var smokePS = smoke.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var ps in smokePS)
+            {
+                if (ps != null && !ps.isPlaying) ps.Play(true);
+            }
+        }
+
+        // 6. DustParticle
+        var dp = ResolveDustParticleController();
+        if (dp != null && dp.dustParticleSystem != null && !dp.dustParticleSystem.isPlaying)
+        {
+            dp.dustParticleSystem.Play(true);
+        }
+    }
+
+    public void LogElectricalBoxState(string stage)
+    {
+        var handleGo = ResolveElectricalBoxHandle();
+        var enableGo = ResolveElectricalBoxEnable();
+
+        bool handleActive = handleGo != null && handleGo.activeSelf;
+        var handleMr = handleGo != null ? handleGo.GetComponent<MeshRenderer>() : null;
+        bool handleRenderer = handleMr != null && handleMr.enabled;
+        var handleMf = handleGo != null ? handleGo.GetComponent<MeshFilter>() : null;
+        string handleMesh = handleMf != null && handleMf.sharedMesh != null ? handleMf.sharedMesh.name : "null";
+        string handleMaterial = handleMr != null && handleMr.sharedMaterial != null ? handleMr.sharedMaterial.name : "null";
+
+        bool enableActive = enableGo != null && enableGo.activeSelf;
+        var enableMr = enableGo != null ? enableGo.GetComponent<MeshRenderer>() : null;
+        bool enableRenderer = enableMr != null && enableMr.enabled;
+        var enableMf = enableGo != null ? enableGo.GetComponent<MeshFilter>() : null;
+        string enableMesh = enableMf != null && enableMf.sharedMesh != null ? enableMf.sharedMesh.name : "null";
+        string enableMaterial = enableMr != null && enableMr.sharedMaterial != null ? enableMr.sharedMaterial.name : "null";
+
+        Debug.Log($"[ELECTRICAL BOX] ({stage})\n" +
+                  $"[ELECTRICAL BOX] Handle active={handleActive}\n" +
+                  $"[ELECTRICAL BOX] Handle renderer={handleRenderer}\n" +
+                  $"[ELECTRICAL BOX] Handle mesh={handleMesh}\n" +
+                  $"[ELECTRICAL BOX] Handle material={handleMaterial}\n" +
+                  $"[ELECTRICAL BOX] Enable active={enableActive}\n" +
+                  $"[ELECTRICAL BOX] Enable renderer={enableRenderer}\n" +
+                  $"[ELECTRICAL BOX] Enable mesh={enableMesh}\n" +
+                  $"[ELECTRICAL BOX] Enable material={enableMaterial}");
+    }
+
+    public void TransitionToHoeStage()
+    {
+        task10SubStage = 4;
+
+        // Invalidate previous speech generation and stop previous voice
+        voicePlaybackVersion++;
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        if (mgr != null) mgr.StopSpeech();
+
+        // 1. Camera snap to Hoe
+        SnapCameraToHoe();
+
+        // 2. Enable HoldSpiral.001, restore original material
+        ApplyHoldSpiralState(HoldSpiralVisualState.StateB_CameraAtHoe);
+
+        // 3. Start required process particles
+        EnsureProcessParticlesActive();
+
+        // 4. Apply interaction highlight on HoldSpiral.001
+        ApplyHoldSpiralState(HoldSpiralVisualState.StateC_HoeInteraction);
+
+        // Ensure HoldSpiral.002 is disabled
+        var hs2 = ResolveHoldSpiral002Target();
+        if (hs2 != null) hs2.SetActive(false);
+
+        // 5. Display description, status & start voice: "Pick up the hose to reduce the red shell formation."
+        UpdateUI(PickUpHoesDescriptionText, PickUpHoesStatusText, 10, 10, "TASK_10_PICK_UP_HOES", "Technical_Mark");
+
+        EnsureSideBreakingTool5Active();
+        Debug.Log("[SequenceHelperFunctions] Transitioned to Hoe stage: Camera snapped to Hoe, hoes visible & highlighted, pick up hose VO started.");
+    }
+
+    public void OnHoeClicked()
+    {
+        task10SubStage = 5;
+
+        // 1. Stop highlight/blink and restore original material on HoldSpiral.001
+        var hs001 = ResolveHoldSpiral001Target();
+        if (hs001 != null)
+        {
+            var hsRackHi = hs001.GetComponent<PotLeakage.Interaction.HoeInteraction>();
+            if (hsRackHi != null)
+            {
+                hsRackHi.SetHighlight(false);
+                hsRackHi.RestoreOriginalMaterial();
+            }
+            // 2. Disable HoldSpiral.001 only after the click
+            hs001.SetActive(false);
+        }
+
+        var matGo = ResolveHoldSpiral001MatTarget();
+        if (matGo != null)
+        {
+            var matHi = matGo.GetComponent<PotLeakage.Interaction.HoeInteraction>();
+            if (matHi != null)
+            {
+                matHi.SetHighlight(false);
+                matHi.RestoreOriginalMaterial();
+            }
+            matGo.SetActive(false);
+        }
+
+        // 3. SNAP camera to TransformPoints/AirUnlock
+        SnapToAirUnlock();
+
+        // 4. Highlight existing electrical box handle yellow and ensure it is active & visible
+        var handleGo = ResolveElectricalBoxHandle();
+        if (handleGo != null)
+        {
+            handleGo.SetActive(true);
+            var mr = handleGo.GetComponent<MeshRenderer>();
+            if (mr != null) mr.enabled = true;
+
+            var handleHi = handleGo.GetComponent<PotLeakage.Interaction.ElectricalBoxHandleInteraction>();
+            if (handleHi == null) handleHi = handleGo.AddComponent<PotLeakage.Interaction.ElectricalBoxHandleInteraction>();
+            handleHi.SetHighlight(true);
+        }
+
+        var enableGo = ResolveElectricalBoxEnable();
+        if (enableGo != null)
+        {
+            enableGo.SetActive(false);
+        }
+
+        LogElectricalBoxState("Entering Open FLR Block Valve");
+
+        // 5. Description, status + voice: "Open the FLR block valve."
+        voicePlaybackVersion++;
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        if (mgr != null) mgr.StopSpeech();
+
+        UpdateUI(OpenFLRValveDescriptionText, OpenFLRValveStatusText, 10, 10, "TASK_10_OPEN_FLR_VALVE", "Technical_Mark");
+
+        EnsureSideBreakingTool5Active();
+        EnsureProcessParticlesActive();
+        Debug.Log("[SequenceHelperFunctions] SubStage 5: HoldSpiral.001 clicked -> disabled, camera snapped to AirUnlock, electrical box handle highlighted yellow, Open FLR valve VO started.");
+    }
+
+    public void OnHoldSpiral001MatClicked()
+    {
+        OnHoeClicked();
+    }
+
+    private Coroutine electricalBoxHandleCoroutine = null;
+
+    public void OnElectricalBoxHandleClicked()
+    {
+        task10SubStage = 6;
+
+        // 1. Stop highlight/blink and disable handle
+        var handleGo = ResolveElectricalBoxHandle();
+        if (handleGo != null)
+        {
+            var handleHi = handleGo.GetComponent<PotLeakage.Interaction.ElectricalBoxHandleInteraction>();
+            if (handleHi != null) handleHi.SetHighlight(false);
+
+            handleGo.SetActive(false);
+        }
+
+        // 2. Enable existing electrical box enable GameObject and ensure it is visible
+        var enableGo = ResolveElectricalBoxEnable();
+        if (enableGo != null)
+        {
+            enableGo.SetActive(true);
+            var mr = enableGo.GetComponent<MeshRenderer>();
+            if (mr != null) mr.enabled = true;
+            var smr = enableGo.GetComponent<SkinnedMeshRenderer>();
+            if (smr != null) smr.enabled = true;
+        }
+
+        LogElectricalBoxState("Handle Clicked -> Enable Active (1.5s observation delay begun)");
+
+        if (electricalBoxHandleCoroutine != null)
+        {
+            StopCoroutine(electricalBoxHandleCoroutine);
+            electricalBoxHandleCoroutine = null;
+        }
+
+        if (Application.isPlaying)
+        {
+            electricalBoxHandleCoroutine = StartCoroutine(ElectricalBoxHandleSequenceRoutine());
+        }
+        else
+        {
+            ExecuteElectricalBoxHandleTransition();
+        }
+    }
+
+    private IEnumerator ElectricalBoxHandleSequenceRoutine()
+    {
+        int myVersion = ++voicePlaybackVersion;
+
+        // Keep the enabled electrical box state visible to trainee for exactly 1.5 seconds
+        yield return new WaitForSeconds(1.5f);
+        if (myVersion != voicePlaybackVersion || task10SubStage != 6) yield break;
+
+        ExecuteElectricalBoxHandleTransition();
+        electricalBoxHandleCoroutine = null;
+    }
+
+    public void ExecuteElectricalBoxHandleTransition()
+    {
+        // 3. Direct SNAP camera to TransformPoints/Normal Pot Operation
+        SnapToNormalPotOperation();
+
+        // 4. Enable existing PIPES (2) GameObject and highlight/blink PIPES (2)
+        var p2 = ResolvePipes2Target();
+        if (p2 != null)
+        {
+            p2.SetActive(true);
+            var p2Hi = p2.GetComponent<PotLeakage.Interaction.Pipes2Interaction>();
+            if (p2Hi == null) p2Hi = p2.AddComponent<PotLeakage.Interaction.Pipes2Interaction>();
+            p2Hi.SetHighlight(true);
+
+            // IMPORTANT: PIPES (2) particle system is NOT playing yet!
+            var p2Ctrl = p2.GetComponent<PotLeakage.VFX.CoolingPipesController>();
+            if (p2Ctrl != null)
+            {
+                p2Ctrl.isCoolingActive = false;
+                p2Ctrl.StopGasDissipation();
+            }
+
+            var p2PS = p2.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var ps in p2PS)
+            {
+                if (ps != null)
+                {
+                    var main = ps.main;
+                    main.playOnAwake = false;
+                    var em = ps.emission;
+                    em.enabled = false;
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                }
+            }
+        }
+
+        // 5. Ensure HoldSpiral.002 remains disabled & enable/play cool gas particle effect if present
+        var hs2 = ResolveHoldSpiral002Target();
+        if (hs2 != null) hs2.SetActive(false);
+        var coolGas = ResolveHoldSpiralCoolGas();
+        if (coolGas != null)
+        {
+            coolGas.transform.localEulerAngles = new Vector3(72.3570251f, 250.899704f, 252.822556f);
+            if (!coolGas.gameObject.activeSelf) coolGas.gameObject.SetActive(true);
+            if (!coolGas.isPlaying) coolGas.Play(true);
+        }
+
+        // 6. Red shell progressive hot lava formation (2.0s)
+        var rs = ResolveRedShellController();
+        if (rs != null)
+        {
+            rs.gameObject.SetActive(true);
+            rs.TriggerProgressiveFormation(2.0f);
+        }
+
+        EnsureRedShellObservationParticlesActive();
+        EnsureSideBreakingTool5Active();
+
+        // 7. Description, status + voice: "Now that the valve is open, cool air is released over there."
+        voicePlaybackVersion++;
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        if (mgr != null) mgr.StopSpeech();
+
+        UpdateUI(ValveOpenCoolAirDescriptionText, ValveOpenCoolAirStatusText, 10, 10, "TASK_10_VALVE_OPEN_COOL_AIR", "Technical_Mark");
+
+        Debug.Log("[SequenceHelperFunctions] SubStage 6: Electrical box handle clicked -> 1.5s delay complete, camera snapped to Normal Pot, PIPES (2) enabled & highlighted (no particles yet), cool air VO playing.");
+    }
+
+    public void OnPipes2Clicked()
+    {
+        task10SubStage = 7;
+
+        // Play gas sound once when PIPES (2) is clicked
+        PlayGasSFX();
+
+        // 1. Stop PIPES (2) highlight/blink, restore original materials
+        var p2 = ResolvePipes2Target();
+        if (p2 != null)
+        {
+            var p2Hi = p2.GetComponent<PotLeakage.Interaction.Pipes2Interaction>();
+            if (p2Hi != null)
+            {
+                p2Hi.SetHighlight(false);
+                p2Hi.RestoreOriginalMaterials();
+            }
+            // 2. Disable PIPES (2)
+            p2.SetActive(false);
+        }
+
+        // 3. Enable PIPES (1) and start its particle/cooling effect
+        ActivatePipes1();
+
+        // 4. Invalidate previous voice & stop speech
+        voicePlaybackVersion++;
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        if (mgr != null) mgr.StopSpeech();
+
+        // 5. Description, status + voice: "Let us start bath packing."
+        UpdateUI(StartBathPackingDescriptionText, StartBathPackingStatusText, 10, 10, "TASK_10_START_BATH_PACKING", "Technical_Mark");
+
+        Debug.Log("[SequenceHelperFunctions] SubStage 7: PIPES (2) clicked -> disabled, PIPES (1) active & particles playing, 'Let us start bath packing.' VO started.");
+    }
+
+    public void StartBathPackingSequence()
+    {
+        task10SubStage = 8;
+
+        if (bathPackingAnimationCoroutine != null)
+        {
+            if (Application.isPlaying) StopCoroutine(bathPackingAnimationCoroutine);
+            bathPackingAnimationCoroutine = null;
+        }
+
+        if (Application.isPlaying)
+        {
+            bathPackingAnimationCoroutine = StartCoroutine(AnimateBathPackingRoutine());
+        }
+        else
+        {
+            // Direct apply for edit/test mode
+            var c14 = ResolveCube014Target();
+            if (c14 != null) c14.SetActive(false);
+            var c13 = ResolveCube013Target();
+            if (c13 != null) c13.SetActive(false);
+            var c51 = ResolveCube051Target();
+            if (c51 != null)
+            {
+                c51.SetActive(true);
+                c51.transform.localPosition = cube051TargetLocalPosition;
+            }
+            var camCtrl = ResolveCameraController();
+            if (camCtrl != null) camCtrl.MoveToNormalPot();
+            else
+            {
+                var np = GameObject.Find("CameraSystem/TransformPoints/Normal Pot") ?? GameObject.Find("TransformPoints/Normal Pot");
+                if (np != null) SnapCameraToTransform(np.transform);
+            }
+            var powder = ResolveBathPowderController();
+            if (powder != null)
+            {
+                if (powder.impactParticleSystem != null)
+                {
+                    powder.impactParticleSystem.transform.localPosition = new Vector3(0.00899999961f, -0.0353999995f, 0.0027999999f);
+                    powder.impactParticleSystem.transform.localEulerAngles = new Vector3(4.26886828e-07f, 353.050018f, 60.9000015f);
+                }
+                powder.PlayPowder();
+            }
+            var p045 = ResolvePlane045Target();
+            if (p045 != null) p045.transform.localPosition = plane045BathPackingTargetLocalPosition;
+            var rs = ResolveRedShellController();
+            if (rs != null) rs.DisableRedShell();
+            var redGo = ResolveRedGameObjectTarget();
+            if (redGo != null) redGo.SetActive(false);
+        }
+    }
+
+    private IEnumerator AnimateBathPackingRoutine()
+    {
+        // 1. Disable Cube.014 and Cube.013 initially
+        var c14 = ResolveCube014Target();
+        if (c14 != null) c14.SetActive(false);
+        var c13 = ResolveCube013Target();
+        if (c13 != null) c13.SetActive(false);
+
+        // 2. Enable Cube.051 at initial position
+        var c51 = ResolveCube051Target();
+        if (c51 != null)
+        {
+            c51.SetActive(true);
+            c51.transform.localPosition = cube051InitialLocalPosition;
+        }
+
+        // 3. Move Cube.051 slowly (Y only) to target position Vector3(-6.80000019, 1.23000002, -0.389999986)
+        float duration = 3.5f;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+            if (c51 != null)
+            {
+                c51.transform.localPosition = Vector3.Lerp(cube051InitialLocalPosition, cube051TargetLocalPosition, smoothT);
+            }
+            yield return null;
+        }
+        if (c51 != null) c51.transform.localPosition = cube051TargetLocalPosition;
+
+        // 4. Snap camera from Normal Pot Operation to TransformPoints/Normal Pot BEFORE BathPowder_Impact plays
+        var camCtrlAnim = ResolveCameraController();
+        if (camCtrlAnim != null)
+        {
+            camCtrlAnim.MoveToNormalPot();
+        }
+        else
+        {
+            var np = GameObject.Find("CameraSystem/TransformPoints/Normal Pot") ?? GameObject.Find("TransformPoints/Normal Pot");
+            if (np != null) SnapCameraToTransform(np.transform);
+        }
+        yield return null;
+
+        // 5. Ensure BathPowder_Impact exact fixed local transform and start powder effect
+        var powderAnim = ResolveBathPowderController();
+        if (powderAnim != null)
+        {
+            if (powderAnim.impactParticleSystem != null)
+            {
+                powderAnim.impactParticleSystem.transform.localPosition = new Vector3(0.00899999961f, -0.0353999995f, 0.0027999999f);
+                powderAnim.impactParticleSystem.transform.localEulerAngles = new Vector3(4.26886828e-07f, 353.050018f, 60.9000015f);
+            }
+            powderAnim.PlayPowder();
+        }
+
+        // 5. Description, status + voice: "Maintain safe distance to avoid splashing of molten bath. Packing is started."
+        voicePlaybackVersion++;
+        int capturedVersion = voicePlaybackVersion;
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        if (mgr != null) mgr.StopSpeech();
+
+        UpdateUI(SafeDistanceDescriptionText, SafeDistanceStatusText, 10, 10, "TASK_10_SAFE_DISTANCE", "Technical_Mark");
+
+        // 6. Wait for voice to finish speaking (or max timeout)
+        yield return new WaitForSeconds(0.5f);
+        while (mgr != null && mgr.IsSpeaking && capturedVersion == voicePlaybackVersion)
+        {
+            yield return null;
+        }
+
+        // 7. Wait 3 seconds after safe distance voice finishes
+        yield return new WaitForSeconds(3.0f);
+        if (capturedVersion != voicePlaybackVersion || task10SubStage != 8) yield break;
+
+        // 8. Move Line (6)/Plane.045 smoothly from -78.12 to -78.0
+        var p045 = ResolvePlane045Target();
+        float pDuration = 1.5f;
+        float pElapsed = 0f;
+        while (pElapsed < pDuration)
+        {
+            pElapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(pElapsed / pDuration);
+            float smoothT = Mathf.SmoothStep(0f, 1f, t);
+            if (p045 != null)
+            {
+                p045.transform.localPosition = Vector3.Lerp(plane045BathPackingStartLocalPosition, plane045BathPackingTargetLocalPosition, smoothT);
+            }
+            yield return null;
+        }
+        if (p045 != null) p045.transform.localPosition = plane045BathPackingTargetLocalPosition;
+
+        // 9. Immediately after Plane.045 completely reaches target position:
+        // Disable red shell component and disable Red GameObject
+        var rs = ResolveRedShellController();
+        if (rs != null) rs.DisableRedShell();
+        var redGo = ResolveRedGameObjectTarget();
+        if (redGo != null) redGo.SetActive(false);
+
+        // Stop powder emission
+        if (powderAnim != null) powderAnim.StopPowder();
+
+        // 10. Description, status + voice: "Packing is done successfully. The red shell intensity has been reduced."
+        voicePlaybackVersion++;
+        if (mgr != null) mgr.StopSpeech();
+
+        UpdateUI(PackingDoneDescriptionText, PackingDoneStatusText, 10, 10, "TASK_10_PACKING_DONE", "Technical_Mark");
+
+        bathPackingAnimationCoroutine = null;
+        Debug.Log("[SequenceHelperFunctions] SubStage 8: Bath packing completed. Plane.045 positioned at -78.0, Red Shell & Red GameObject disabled, VO 'Packing is done successfully.' playing.");
+    }
+
+    public void TransitionToBathPackingVoltageCheck()
+    {
+        task10SubStage = 9;
+
+        // 1. Direct SNAP camera to TransformPoints/PotControlMachine
+        var camCtrl = ResolveCameraController();
+        if (camCtrl != null)
+        {
+            camCtrl.MoveToPotControlMachine();
+        }
+        else
+        {
+            var pcm = GameObject.Find("CameraSystem/TransformPoints/PotControlMachine") ?? GameObject.Find("TransformPoints/PotControlMachine");
+            if (pcm != null) SnapCameraToTransform(pcm.transform);
+        }
+
+        // 2. Invalidate previous voice & stop speech
+        voicePlaybackVersion++;
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        if (mgr != null) mgr.StopSpeech();
+
+        // 3. Description, status + voice: "Check if the voltage is within the safer limit range between 4.1 to 4.3 V."
+        UpdateUI(VoltageSaferLimitRangeDescriptionText, VoltageSaferLimitRangeStatusText, 10, 10, "TASK_10_VOLTAGE_SAFER_LIMIT", "Technical_Mark");
+
+        Debug.Log("[SequenceHelperFunctions] SubStage 9: Camera snapped to PotControlMachine, 'Check if the voltage is within the safer limit range between 4.1 to 4.3 V.' VO started.");
+    }
+
+    public void TransitionToFinalNormalPotVerification()
+    {
+        task10SubStage = 10;
+        isFinalHoodClosingCompleted = false;
+
+        // 1. Direct SNAP camera to TransformPoints/Normal Pot
+        SnapToNormalPot();
+
+        // 2. Ensure visual state: Cube.051 = DISABLED, Cube.013 = DISABLED
+        var c51 = ResolveCube051Target();
+        if (c51 != null) c51.SetActive(false);
+        var c13 = ResolveCube013Target();
+        if (c13 != null) c13.SetActive(false);
+        var c14 = ResolveCube014Target();
+        if (c14 != null) c14.SetActive(false);
+
+        // Ensure HoldSpiral.002 is disabled
+        var hs2 = ResolveHoldSpiral002Target();
+        if (hs2 != null) hs2.SetActive(false);
+
+        // Ensure Red Shell & Red GameObject remain disabled
+        var rs = ResolveRedShellController();
+        if (rs != null) rs.DisableRedShell();
+        var redGo = ResolveRedGameObjectTarget();
+        if (redGo != null) redGo.SetActive(false);
+
+        // 3. STOP ALL LEAKAGE EFFECTS FIRST BEFORE HOOD CLOSING:
+        DeactivatePipes1();
+        var p1 = GameObject.Find("PIPES (1)");
+        if (p1 != null) p1.SetActive(false);
+
+        DeactivateCoolingPipes();
+        var p = ResolvePipesTarget();
+        if (p != null) p.SetActive(false);
+
+        var vfxGo = GameObject.Find("VFX/MoltenAluminium_VFX") ?? GameObject.Find("MoltenAluminium_VFX");
+        if (vfxGo != null)
+        {
+            var vfxCtrl = vfxGo.GetComponent<PotLeakage.VFX.MoltenAluminiumVFXController>();
+            if (vfxCtrl != null)
+            {
+                vfxCtrl.StopMoltenMetalOverflow();
+            }
+            var allPS = vfxGo.GetComponentsInChildren<ParticleSystem>(true);
+            foreach (var ps in allPS)
+            {
+                if (ps != null)
+                {
+                    ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    ps.gameObject.SetActive(false);
+                }
+            }
+            var meshRenderers = vfxGo.GetComponentsInChildren<MeshRenderer>(true);
+            foreach (var mr in meshRenderers)
+            {
+                if (mr != null) mr.enabled = false;
+            }
+        }
+
+        // 4. Invalidate previous voice & stop speech
+        voicePlaybackVersion++;
+        var mgr = TruckTyreReplacement.Core.Manager.Instance;
+        if (mgr != null) mgr.StopSpeech();
+
+        // 5. Description, status + voice: "Now that the leakage and the shell formation is completely stopped you have completed the pot leakage module now close the hood."
+        UpdateUI(FinalVerificationDescriptionText, FinalVerificationStatusText, 10, 10, "TASK_10_FINAL_VERIFICATION", "Technical_Mark");
+
+        // 6. Start Hood Closing Interaction
+        StartHoodClosingInteraction();
+
+        Debug.Log("[SequenceHelperFunctions] SubStage 10: Camera snapped to Normal Pot, PIPES/PIPES (1)/Molten leakage stopped, VO playing, hood closing interaction started.");
     }
 
     public List<Renderer> CollectWalkieTalkieBlinkTargets()
@@ -2307,56 +5716,99 @@ public class SequenceHelperFunctions : MonoBehaviour
 
     private IEnumerator PlayVoiceClipRoutine(AudioClip clip, System.Action onComplete)
     {
+        int myVersion = ++voicePlaybackVersion;
         EnsureVoiceAudio();
         Voice_Audio.Stop();
         Voice_Audio.clip = clip;
         yield return null;
+        if (myVersion != voicePlaybackVersion) yield break;
         Voice_Audio.Play();
 
         float startWait = Time.realtimeSinceStartup;
-        yield return new WaitUntil(() => Voice_Audio.isPlaying || (Time.realtimeSinceStartup - startWait) > 1.0f);
+        yield return new WaitUntil(() => (Voice_Audio != null && Voice_Audio.isPlaying) || (Time.realtimeSinceStartup - startWait) > 1.0f || myVersion != voicePlaybackVersion);
 
-        if (Voice_Audio.isPlaying)
+        if (myVersion != voicePlaybackVersion) yield break;
+
+        if (Voice_Audio != null && Voice_Audio.isPlaying)
         {
-            yield return new WaitUntil(() => !Voice_Audio.isPlaying);
+            while (Voice_Audio != null && Voice_Audio.isPlaying)
+            {
+                if (myVersion != voicePlaybackVersion)
+                {
+                    Voice_Audio.Stop();
+                    Voice_Audio.clip = null;
+                    yield break;
+                }
+                yield return null;
+            }
         }
+        if (myVersion != voicePlaybackVersion) yield break;
         yield return new WaitForSeconds(0.2f);
+        if (myVersion != voicePlaybackVersion) yield break;
         onComplete?.Invoke();
     }
 
     public void PlayAudio_TriggerOnComplete(AudioClip clip) { if (clip != null) StartCoroutine(PlayAudioWhenReady(clip)); }
     private IEnumerator PlayAudioWhenReady(AudioClip clip)
     {
+        int myVersion = ++voicePlaybackVersion;
         EnsureVoiceAudio();
         Voice_Audio.Stop();
         Voice_Audio.clip = clip;
         yield return null;
+        if (myVersion != voicePlaybackVersion) yield break;
         Voice_Audio.Play();
         float startWait = Time.realtimeSinceStartup;
-        yield return new WaitUntil(() => Voice_Audio.isPlaying || (Time.realtimeSinceStartup - startWait) > 1.0f);
-        if (Voice_Audio.isPlaying)
+        yield return new WaitUntil(() => (Voice_Audio != null && Voice_Audio.isPlaying) || (Time.realtimeSinceStartup - startWait) > 1.0f || myVersion != voicePlaybackVersion);
+        if (myVersion != voicePlaybackVersion) yield break;
+        if (Voice_Audio != null && Voice_Audio.isPlaying)
         {
-            yield return new WaitUntil(() => !Voice_Audio.isPlaying);
+            while (Voice_Audio != null && Voice_Audio.isPlaying)
+            {
+                if (myVersion != voicePlaybackVersion)
+                {
+                    Voice_Audio.Stop();
+                    Voice_Audio.clip = null;
+                    yield break;
+                }
+                yield return null;
+            }
         }
+        if (myVersion != voicePlaybackVersion) yield break;
         yield return new WaitForSeconds(0.2f);
-        handler.TaskCompleted();
+        if (myVersion != voicePlaybackVersion) yield break;
+        Debug.Log("[SequenceHelperFunctions] Audio finished. Progression requires trainee Next click.");
     }
 
     public void PlayAudio_WithoutNextTask(AudioClip clip) { if (clip != null) StartCoroutine(PlayAudioWhenReady_WithoutNextTask(clip)); }
     private IEnumerator PlayAudioWhenReady_WithoutNextTask(AudioClip clip)
     {
+        int myVersion = ++voicePlaybackVersion;
         EnsureVoiceAudio();
         Voice_Audio.Stop();
         Voice_Audio.clip = clip;
         yield return null;
+        if (myVersion != voicePlaybackVersion) yield break;
         Voice_Audio.Play();
         float startWait = Time.realtimeSinceStartup;
-        yield return new WaitUntil(() => Voice_Audio.isPlaying || (Time.realtimeSinceStartup - startWait) > 1.0f);
-        if (Voice_Audio.isPlaying)
+        yield return new WaitUntil(() => (Voice_Audio != null && Voice_Audio.isPlaying) || (Time.realtimeSinceStartup - startWait) > 1.0f || myVersion != voicePlaybackVersion);
+        if (myVersion != voicePlaybackVersion) yield break;
+        if (Voice_Audio != null && Voice_Audio.isPlaying)
         {
-            yield return new WaitUntil(() => !Voice_Audio.isPlaying);
+            while (Voice_Audio != null && Voice_Audio.isPlaying)
+            {
+                if (myVersion != voicePlaybackVersion)
+                {
+                    Voice_Audio.Stop();
+                    Voice_Audio.clip = null;
+                    yield break;
+                }
+                yield return null;
+            }
         }
+        if (myVersion != voicePlaybackVersion) yield break;
         yield return new WaitForSeconds(0.2f);
+        if (myVersion != voicePlaybackVersion) yield break;
         handler.CurrentTaskCompleted();
     }
 
@@ -2390,15 +5842,14 @@ public class SequenceHelperFunctions : MonoBehaviour
 
     private IEnumerator PlayLocaleAudioRoutine(string key, bool triggerNextTask)
     {
+        int myVersion = ++voicePlaybackVersion;
         var mgr = Manager.Instance != null ? Manager.Instance : UnityEngine.Object.FindFirstObjectByType<Manager>();
 
         if (mgr == null)
         {
-            // No localization/TTS system available at all - this is not a content
-            // (missing/outdated audio) condition, so preserve the original fallback
-            // rather than permanently blocking the task.
             Debug.LogWarning("[SequenceHelperFunctions][TTS] Manager instance unavailable — cannot play audio.");
             yield return new WaitForSeconds(1.0f);
+            if (myVersion != voicePlaybackVersion) yield break;
             if (triggerNextTask) handler.TaskCompleted();
             else handler.CurrentTaskCompleted();
             yield break;
@@ -2414,50 +5865,49 @@ public class SequenceHelperFunctions : MonoBehaviour
 
         if (source != null)
         {
-            // Phase 1: wait up to 1s for Manager.IsSpeaking to become true (Speak() is async/queued)
             float waitStart = Time.realtimeSinceStartup;
-            yield return new WaitUntil(() => mgr.IsSpeaking || (Time.realtimeSinceStartup - waitStart) > 1.0f);
+            yield return new WaitUntil(() => mgr.IsSpeaking || (Time.realtimeSinceStartup - waitStart) > 1.0f || myVersion != voicePlaybackVersion);
+            if (myVersion != voicePlaybackVersion) yield break;
 
-            // Phase 2: wait up to 2.5s for AudioSource.isPlaying to become true
             waitStart = Time.realtimeSinceStartup;
-            yield return new WaitUntil(() => source.isPlaying || (Time.realtimeSinceStartup - waitStart) > 2.5f);
+            yield return new WaitUntil(() => source.isPlaying || (Time.realtimeSinceStartup - waitStart) > 2.5f || myVersion != voicePlaybackVersion);
+            if (myVersion != voicePlaybackVersion) yield break;
 
             Debug.Log($"[SequenceHelperFunctions][TTS] isPlaying={source.isPlaying} clip={source.clip?.name} length={source.clip?.length}s");
 
             if (source.isPlaying)
             {
-                // Phase 3: wait for audio to actually finish. This - not the mere
-                // absence of isPlaying right after Play(), and not a fixed delay -
-                // is the only condition that counts as real playback completion.
-                yield return new WaitUntil(() => !source.isPlaying && !mgr.IsSpeaking);
+                while (source.isPlaying || mgr.IsSpeaking)
+                {
+                    if (myVersion != voicePlaybackVersion) yield break;
+                    yield return null;
+                }
                 Debug.Log($"[TTS PLAY COMPLETE]\nKey = {key}\nLanguage = {mgr.CurrentLanguage}");
                 audioActuallyCompleted = true;
             }
             else
             {
-                // Audio never started - missing/outdated cached WAV, or generation
-                // still pending.
                 var status = mgr.GetSpeechCacheStatus(key);
                 Debug.LogWarning($"[TTS BLOCKED]\nKey = {key}\nLanguage = {mgr.CurrentLanguage}\nReason = {status.ToString().ToUpperInvariant()}");
-                yield return new WaitUntil(() => !mgr.IsSpeaking);
+                while (mgr.IsSpeaking)
+                {
+                    if (myVersion != voicePlaybackVersion) yield break;
+                    yield return null;
+                }
             }
         }
 
+        if (myVersion != voicePlaybackVersion) yield break;
+
         if (!audioActuallyCompleted)
         {
-            if (triggerNextTask)
-            {
-                Debug.LogWarning("[SequenceHelperFunctions][TTS] Audio did not report isPlaying for auto-advancing task. Waiting fallback duration before advancing.");
-                yield return new WaitForSeconds(3.0f);
-                handler.TaskCompleted();
-            }
             yield break;
         }
 
         yield return new WaitForSeconds(0.3f);
+        if (myVersion != voicePlaybackVersion) yield break;
 
-        if (triggerNextTask) handler.TaskCompleted();
-        else handler.CurrentTaskCompleted();
+        Debug.Log("[SequenceHelperFunctions] Locale audio finished. Progression requires trainee Next click.");
     }
 
     /// <summary>

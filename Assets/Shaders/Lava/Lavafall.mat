@@ -69,13 +69,13 @@ Material:
     - _BottomRemap: {r: 0, g: 1, b: 0, a: 0}
     - _FresnelColor: {r: 0.9, g: 0.32, b: 0.01, a: 1}
     - _LavaColor: {r: 2.4, g: 1.65, b: 0.15, a: 1}
-    - _LavaNormalSpeed: {r: 0, g: -0.2176, b: 0, a: 0}
+    - _LavaNormalSpeed: {r: 0, g: -0.06, b: 0, a: 0}
     - _LavaScale: {r: 1, g: 1, b: 0, a: 0}
     - _LavaScaleNormal: {r: 1, g: 1.5, b: 0, a: 0}
-    - _LavaSpeed: {r: 0, g: -0.16, b: 0, a: 0}
+    - _LavaSpeed: {r: 0, g: -0.04, b: 0, a: 0}
     - _Lavaremap: {r: 0.1, g: 1, b: 0, a: 0}
-    - _NoiseSpeed: {r: 0.05, g: -0.1312, b: 0, a: 0}
-    - _VoronoiSpeed: {r: 0, g: -0.057600003, b: 0, a: 0}
+    - _NoiseSpeed: {r: 0.01, g: -0.03, b: 0, a: 0}
+    - _VoronoiSpeed: {r: 0, g: -0.015, b: 0, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
 --- !u!114 &5592098867669067023

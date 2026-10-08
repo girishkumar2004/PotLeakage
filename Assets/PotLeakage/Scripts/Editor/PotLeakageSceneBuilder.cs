@@ -26,32 +26,11 @@ namespace PotLeakage.Editor
         private const string HighlightMatPath = "Assets/PotLeakage/Materials/M_PotLeakage_Highlight.mat";
         private const string MagmaMatPath = "Assets/PotLeakage/Materials/M_Magma_HotMetal.mat";
 
-        [MenuItem("Vedanta Training Data/Deploy Training JSON")]
         public static void DeployTrainingJson()
         {
-            string sourcePath = Path.Combine(Application.dataPath, "PotLeakage", "Data", "training.json");
-            string targetPath = Path.Combine(Application.persistentDataPath, "TrainingData", "training.json");
-
-            if (!File.Exists(sourcePath))
-            {
-                Debug.LogError($"[JSON DEPLOY] Source training.json not found at {sourcePath}");
-                return;
-            }
-
-            string targetDir = Path.GetDirectoryName(targetPath);
-            if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
-
-            File.Copy(sourcePath, targetPath, true);
-            Debug.Log($"[JSON DEPLOY] Successfully deployed training.json to {targetPath}");
-
-            var mgr = TruckTyreReplacement.Core.Manager.Instance;
-            if (mgr != null)
-            {
-                mgr.ReloadTrainingData();
-            }
+            VedantaTraining.Editor.VedantaTrainingDataTools.DeployTrainingJson();
         }
 
-        [MenuItem("Vedanta/Build Pot Leakage Scene")]
         public static void BuildScene()
         {
             // 1. Ensure Data directories exist
@@ -797,7 +776,6 @@ namespace PotLeakage.Editor
             Debug.Log($"[PotLeakageSceneBuilder] Successfully created and saved scene: {ScenePath}");
         }
 
-        [MenuItem("Vedanta/Configure 7-Task Storyboard Scene")]
         public static void ConfigureStoryboard7Tasks()
         {
             var scene = EditorSceneManager.OpenScene(ScenePath);

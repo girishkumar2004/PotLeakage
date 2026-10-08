@@ -137,8 +137,10 @@ namespace TruckTyreReplacement.Core
             public string text;
             public string voiceProfile;
             public float pitch;
+            public int version;
         }
 
+        private int speechVersion = 0;
         private readonly Queue<SpeechRequest> speechQueue = new Queue<SpeechRequest>();
         private Coroutine speechCoroutine;
         private bool isSpeaking = false;
@@ -526,6 +528,9 @@ namespace TruckTyreReplacement.Core
                 failureReason = "Generated file not found.";
                 return false;
             }
+
+            // Ensure PCM silence padding is applied before cache commit
+            LocalTTSCacheService.ApplyPcmSilencePadding(tempWavPath);
 
             byte[] bytes;
             try
@@ -1023,13 +1028,18 @@ namespace TruckTyreReplacement.Core
 
         public void SpeakText(string text, string key = "")
         {
-            SpeakText(text, key, "", 1.0f);
+            string profile = LocalTTSCacheService.IsMaleTrainingSentence(text, key) ? "Technical_Mark" : "";
+            SpeakText(text, key, profile, 1.0f);
         }
 
         public void SpeakText(string text, string key, string voiceProfile, float pitch = 1.0f)
         {
             if (string.IsNullOrEmpty(text)) return;
             string keyToUse = !string.IsNullOrEmpty(key) ? key : text;
+            if (string.IsNullOrEmpty(voiceProfile) && LocalTTSCacheService.IsMaleTrainingSentence(text, keyToUse))
+            {
+                voiceProfile = "Technical_Mark";
+            }
             SpeakDirect(text, keyToUse, voiceProfile, pitch);
         }
 
@@ -1039,17 +1049,26 @@ namespace TruckTyreReplacement.Core
 
             string resolvedKey = textOrKey;
             string textToSpeak = textOrKey;
+            string voiceProfile = "";
             var entry = translationDatabase?.Find(e => string.Equals(e.key, textOrKey, StringComparison.OrdinalIgnoreCase));
             if (entry != null)
             {
                 textToSpeak = GetSpeechText(textOrKey);
             }
-            SpeakDirect(textToSpeak, resolvedKey, "", 1.0f);
+            if (LocalTTSCacheService.IsMaleTrainingSentence(textToSpeak, resolvedKey))
+            {
+                voiceProfile = "Technical_Mark";
+            }
+            SpeakDirect(textToSpeak, resolvedKey, voiceProfile, 1.0f);
         }
 
         private void SpeakDirect(string textToSpeak, string key, string voiceProfile = "", float pitch = 1.0f)
         {
             if (string.IsNullOrEmpty(textToSpeak)) return;
+            if (string.IsNullOrEmpty(voiceProfile) && LocalTTSCacheService.IsMaleTrainingSentence(textToSpeak, key))
+            {
+                voiceProfile = "Technical_Mark";
+            }
 
             if (!IsLanguageSelected)
             {
@@ -1073,14 +1092,15 @@ namespace TruckTyreReplacement.Core
             lastSpokenText = cleanText;
 
             Debug.Log($"[AIR TTS]\nKey = {key}\nLanguage = {currentLanguage}\nVoice = {voiceProfile}\nSpeechText = {cleanText}\nAudioSource = {(voiceAudioSource != null ? voiceAudioSource.name : "null")}\nPlayRequested = TRUE");
-            Debug.Log($"[TTS] Speaking: \"{cleanText}\"");
+            Debug.Log($"[TTS] START: Key = \"{key}\", Text = \"{cleanText}\"");
 
             if (interruptCurrentSpeech)
             {
                 StopSpeech();
             }
 
-            speechQueue.Enqueue(new SpeechRequest { key = key, text = cleanText, voiceProfile = voiceProfile, pitch = pitch });
+            int myVersion = ++speechVersion;
+            speechQueue.Enqueue(new SpeechRequest { key = key, text = cleanText, voiceProfile = voiceProfile, pitch = pitch, version = myVersion });
             isSpeaking = true;
 
             if (Application.isPlaying)
@@ -1105,10 +1125,12 @@ namespace TruckTyreReplacement.Core
 
         public void StopSpeech()
         {
+            speechVersion++;
             speechQueue.Clear();
-            if (voiceAudioSource != null && voiceAudioSource.isPlaying)
+            if (voiceAudioSource != null)
             {
-                voiceAudioSource.Stop();
+                if (voiceAudioSource.isPlaying) voiceAudioSource.Stop();
+                voiceAudioSource.clip = null;
             }
             isSpeaking = false;
             if (speechCoroutine != null)
@@ -1116,6 +1138,9 @@ namespace TruckTyreReplacement.Core
                 StopCoroutine(speechCoroutine);
                 speechCoroutine = null;
             }
+            lastSpokenKey = "";
+            lastSpokenText = "";
+            Debug.Log($"[TTS] STOP: speechVersion = {speechVersion}");
         }
 
         public AudioSource GetVoiceAudioSource()
@@ -1164,6 +1189,12 @@ namespace TruckTyreReplacement.Core
             while (speechQueue.Count > 0)
             {
                 var request = speechQueue.Dequeue();
+                if (request.version != speechVersion)
+                {
+                    Debug.Log($"[TTS] IGNORE STALE: Request version {request.version} != Current {speechVersion}");
+                    continue;
+                }
+
                 string hash = LocalTTSCacheService.ComputeSpeechHash(langName, request.text, request.voiceProfile);
 
                 AudioClip clipToPlay = ResolveClipForPlayback(langName, hash, request.text, request.voiceProfile, out TTSCacheStatus status, out string expectedPath);
@@ -1185,6 +1216,13 @@ namespace TruckTyreReplacement.Core
 
                 if (clipToPlay != null && voiceAudioSource != null)
                 {
+                    if (request.version != speechVersion)
+                    {
+                        Debug.Log($"[TTS] IGNORE STALE: Clip resolved but version changed ({request.version} != {speechVersion})");
+                        yield break;
+                    }
+
+                    Debug.Log($"[TTS] AUDIO READY: Key = \"{request.key}\", File = \"{clipToPlay.name}\"");
                     Debug.Log($"[TTS RESOLVED]\nKey = {request.key}\nLanguage = {langName}\nVoice = {request.voiceProfile}\nHash = {hash}\nStatus = VALID");
 
                     voiceAudioSource.Stop();
@@ -1193,6 +1231,14 @@ namespace TruckTyreReplacement.Core
                     voiceAudioSource.pitch = request.pitch > 0.1f ? request.pitch : 1.0f;
                     voiceAudioSource.time = 0f;
                     yield return null; // 1-frame settle buffer to let Unity audio engine prime the clip
+
+                    if (request.version != speechVersion)
+                    {
+                        voiceAudioSource.Stop();
+                        voiceAudioSource.clip = null;
+                        yield break;
+                    }
+
                     voiceAudioSource.Play();
 
                     Debug.Log($"[TTS PLAY START]\nKey = {request.key}\nLanguage = {langName}\nVoice = {request.voiceProfile}\nHash = {hash}\nClip = {clipToPlay.name}");
@@ -1204,6 +1250,12 @@ namespace TruckTyreReplacement.Core
                     float waited = 0f;
                     while (!voiceAudioSource.isPlaying && waited < 1f)
                     {
+                        if (request.version != speechVersion)
+                        {
+                            voiceAudioSource.Stop();
+                            voiceAudioSource.clip = null;
+                            yield break;
+                        }
                         waited += Time.deltaTime;
                         yield return null;
                     }
@@ -1217,12 +1269,26 @@ namespace TruckTyreReplacement.Core
                         waited = 0f;
                         while (voiceAudioSource.isPlaying && waited < safetyTimeout)
                         {
+                            if (request.version != speechVersion)
+                            {
+                                voiceAudioSource.Stop();
+                                voiceAudioSource.clip = null;
+                                yield break;
+                            }
                             waited += Time.deltaTime;
                             yield return null;
                         }
                         Debug.Log($"[TTS PLAY COMPLETE]\nKey = {request.key}\nLanguage = {langName}\nHash = {hash}");
                         Debug.Log("[TTS] Completed");
                     }
+
+                    if (request.version != speechVersion)
+                    {
+                        voiceAudioSource.Stop();
+                        voiceAudioSource.clip = null;
+                        yield break;
+                    }
+
                     voiceAudioSource.pitch = 1.0f;
                     OnSpeechCompleted?.Invoke(request.key, request.text);
                 }
@@ -1231,7 +1297,10 @@ namespace TruckTyreReplacement.Core
                     Debug.LogWarning($"[TTS BLOCKED]\nKey = {request.key}\nLanguage = {langName}\nStatus = {status.ToString().ToUpperInvariant()}");
                     Debug.LogWarning($"[TTS MISSING]\nKey = {request.key}\nLanguage = {langName}\nSpeech = {request.text}\nExpectedPath = {expectedPath}");
                     yield return new WaitForSeconds(1.0f);
-                    OnSpeechCompleted?.Invoke(request.key, request.text);
+                    if (request.version == speechVersion)
+                    {
+                        OnSpeechCompleted?.Invoke(request.key, request.text);
+                    }
                 }
             }
 
@@ -1260,6 +1329,20 @@ namespace TruckTyreReplacement.Core
                 {
                     string projPath = Path.Combine(Application.dataPath, "PotLeakage", "Audio", "TTS", ttsCache.GetCacheFileName(langName, hash));
                     if (File.Exists(projPath)) expectedPath = projPath;
+                    else if (!string.IsNullOrEmpty(speechText))
+                    {
+                        // Fallback check between plain hash and Technical_Mark hash
+                        string altHash = string.IsNullOrEmpty(voiceProfile)
+                            ? LocalTTSCacheService.ComputeSpeechHash(langName, speechText, "Technical_Mark")
+                            : LocalTTSCacheService.ComputeSpeechHash(langName, speechText, "");
+                        string altSaPath = Path.Combine(Application.streamingAssetsPath, "TTSCache", ttsCache.GetCacheFileName(langName, altHash));
+                        if (File.Exists(altSaPath)) expectedPath = altSaPath;
+                        else
+                        {
+                            string altProjPath = Path.Combine(Application.dataPath, "PotLeakage", "Audio", "TTS", ttsCache.GetCacheFileName(langName, altHash));
+                            if (File.Exists(altProjPath)) expectedPath = altProjPath;
+                        }
+                    }
                 }
             }
 
@@ -1278,7 +1361,8 @@ namespace TruckTyreReplacement.Core
 
             if (status == TTSCacheStatus.Valid)
             {
-                var clip = ttsCache.LoadClipFromDisk(langName, hash, $"{langName}_{hash}");
+                var clip = ttsCache.LoadClipFromPath(expectedPath, $"{langName}_{hash}")
+                           ?? ttsCache.LoadClipFromDisk(langName, hash, $"{langName}_{hash}");
                 if (clip != null)
                 {
                     ttsCache.SetMemoryClip(langName, hash, clip);

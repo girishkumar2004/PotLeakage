@@ -268,7 +268,7 @@ public class SequenceHandler : MonoBehaviour
 
         if (!WaitForTrigger)
         {
-            activeTask.EventsToFollow.Invoke();
+            InvokeTaskEvents(activeTask);
         }
     }
 
@@ -281,7 +281,6 @@ public class SequenceHandler : MonoBehaviour
             currentSpeakingTaskIndex = currentTask;
             currentSpeakingGeneration = taskGeneration;
             taskCompletionHandled = false;
-
             Task activeTask = sequenceList[currentSequence].TaskList[currentTask];
             activeTask.TaskCompleted = false;
 
@@ -303,13 +302,37 @@ public class SequenceHandler : MonoBehaviour
 
             if (!WaitForTrigger)
             {
-                activeTask.EventsToFollow.Invoke();
+                InvokeTaskEvents(activeTask);
             }
         }
         else
         {
             Debug.LogWarning($"Attempted to play invalid task: Sequence {currentSequence}, Task {currentTask}");
         }
+    }
+
+    private void InvokeTaskEvents(Task activeTask)
+    {
+        if (activeTask == null || activeTask.EventsToFollow == null) return;
+        activeTask.EventsToFollow.Invoke();
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            for (int i = 0; i < activeTask.EventsToFollow.GetPersistentEventCount(); i++)
+            {
+                var target = activeTask.EventsToFollow.GetPersistentTarget(i);
+                var method = activeTask.EventsToFollow.GetPersistentMethodName(i);
+                if (target != null && !string.IsNullOrEmpty(method))
+                {
+                    var mInfo = target.GetType().GetMethod(method, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                    if (mInfo != null && mInfo.GetParameters().Length == 0)
+                    {
+                        mInfo.Invoke(target, null);
+                    }
+                }
+            }
+        }
+#endif
     }
 
     private void ExecuteTaskInstructionAndTTS(Task task)

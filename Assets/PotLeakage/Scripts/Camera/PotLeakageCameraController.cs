@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -66,10 +67,17 @@ namespace PotLeakage.Camera
         public Transform toolsTarget;
         [Tooltip("Focus view on ToolBoxSelection under TransformPoints (Task 08)")]
         public Transform toolBoxSelectionTarget;
+        [Tooltip("Focus view on PTM Crane under TransformPoints (Task 10)")]
+        public Transform ptmCraneTarget;
 
         [Header("Audio")]
         [Tooltip("SFX played on camera transition (swap.mp3)")]
         public AudioClip swapAudioClip;
+        [Tooltip("SFX played continuously during camera movement to PTM Crane (CraneHum.wav)")]
+        public AudioClip craneHumAudioClip;
+
+        private AudioSource craneHumAudioSource;
+        private Coroutine ptmCraneMoveCoroutine;
 
         // Backward compatibility aliases
         public AudioClip cameraTransitionAudio { get => swapAudioClip; set => swapAudioClip = value; }
@@ -128,10 +136,23 @@ namespace PotLeakage.Camera
                 if (pcm != null) potControlMachineTarget = pcm.transform;
             }
 
+            if (ptmCraneTarget == null)
+            {
+                var pt = GameObject.Find("CameraSystem/TransformPoints/PTM Crane") ?? GameObject.Find("TransformPoints/PTM Crane") ?? GameObject.Find("PTM Crane");
+                if (pt != null) ptmCraneTarget = pt.transform;
+            }
+
             if (swapAudioClip == null)
             {
 #if UNITY_EDITOR
                 swapAudioClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/swap.mp3");
+#endif
+            }
+
+            if (craneHumAudioClip == null)
+            {
+#if UNITY_EDITOR
+                craneHumAudioClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/CraneHum.wav");
 #endif
             }
 
@@ -345,6 +366,61 @@ namespace PotLeakage.Camera
             return false;
         }
 
+        public void StartCraneHum()
+        {
+            if (craneHumAudioClip == null)
+            {
+#if UNITY_EDITOR
+                craneHumAudioClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>("Assets/Audio/CraneHum.wav");
+#endif
+            }
+            if (craneHumAudioClip == null) return;
+
+            if (craneHumAudioSource == null)
+            {
+                craneHumAudioSource = gameObject.AddComponent<AudioSource>();
+                craneHumAudioSource.playOnAwake = false;
+                craneHumAudioSource.spatialBlend = 0f;
+            }
+
+            craneHumAudioSource.clip = craneHumAudioClip;
+            craneHumAudioSource.loop = true;
+            craneHumAudioSource.volume = 1f;
+            if (!craneHumAudioSource.isPlaying)
+            {
+                craneHumAudioSource.Play();
+            }
+        }
+
+        public void StopCraneHum(float fadeDuration = 0.2f)
+        {
+            if (craneHumAudioSource == null || !craneHumAudioSource.isPlaying) return;
+            if (fadeDuration <= 0.01f || !Application.isPlaying)
+            {
+                craneHumAudioSource.Stop();
+                return;
+            }
+            StartCoroutine(FadeOutCraneHumRoutine(fadeDuration));
+        }
+
+        private IEnumerator FadeOutCraneHumRoutine(float duration)
+        {
+            if (craneHumAudioSource == null) yield break;
+            float startVol = craneHumAudioSource.volume;
+            float elapsed = 0f;
+            while (elapsed < duration && craneHumAudioSource != null)
+            {
+                elapsed += Time.deltaTime;
+                craneHumAudioSource.volume = Mathf.Lerp(startVol, 0f, elapsed / duration);
+                yield return null;
+            }
+            if (craneHumAudioSource != null)
+            {
+                craneHumAudioSource.Stop();
+                craneHumAudioSource.volume = 1f;
+            }
+        }
+
         /// <summary>
         /// Instantly snaps the camera to the target transform's position and rotation with 0 duration.
         /// Zero panning, zero interpolation, zero coroutines.
@@ -352,6 +428,13 @@ namespace PotLeakage.Camera
         /// </summary>
         public void SnapCameraToTransform(Transform target)
         {
+            if (ptmCraneMoveCoroutine != null)
+            {
+                StopCoroutine(ptmCraneMoveCoroutine);
+                ptmCraneMoveCoroutine = null;
+            }
+            StopCraneHum(0f);
+
             if (target == null)
             {
                 Debug.LogWarning("[PotLeakageCameraController] SnapCameraToTransform called with null target.");
@@ -406,6 +489,20 @@ namespace PotLeakage.Camera
         }
         public void MoveToNormalPotTarget() => MoveToNormalPot();
         public void MoveToPotMachine() => SnapCameraToTransform(normalPotOperationTarget);
+
+        [Tooltip("Focus view on AirUnlock under TransformPoints")]
+        public Transform airUnlockTarget;
+
+        public void MoveToAirUnlock()
+        {
+            if (airUnlockTarget == null)
+            {
+                var au = GameObject.Find("CameraSystem/TransformPoints/AirUnlock") ?? GameObject.Find("TransformPoints/AirUnlock") ?? GameObject.Find("AirUnlock");
+                if (au != null) airUnlockTarget = au.transform;
+            }
+            SnapCameraToTransform(airUnlockTarget != null ? airUnlockTarget : normalPotOperationTarget);
+        }
+
         public void MoveToPotControlMachine()
         {
             if (potControlMachineTarget == null)
@@ -440,6 +537,72 @@ namespace PotLeakage.Camera
             SnapCameraToTransform(toolBoxSelectionTarget != null ? toolBoxSelectionTarget : toolsTarget);
         }
 
+        public void MoveToPTMCrane()
+        {
+            MoveToPTMCrane(2.0f);
+        }
+
+        public void MoveToPTMCrane(float duration)
+        {
+            if (ptmCraneTarget == null)
+            {
+                var pt = GameObject.Find("CameraSystem/TransformPoints/PTM Crane") ?? GameObject.Find("TransformPoints/PTM Crane") ?? GameObject.Find("PTM Crane");
+                if (pt != null) ptmCraneTarget = pt.transform;
+            }
+
+            Transform target = ptmCraneTarget != null ? ptmCraneTarget : normalPotOperationTarget;
+            if (target == null) return;
+
+            if (ptmCraneMoveCoroutine != null)
+            {
+                StopCoroutine(ptmCraneMoveCoroutine);
+                ptmCraneMoveCoroutine = null;
+            }
+
+            if (Application.isPlaying && duration > 0.05f)
+            {
+                ptmCraneMoveCoroutine = StartCoroutine(MoveToPTMCraneRoutine(target, duration));
+            }
+            else
+            {
+                SnapCameraToTransform(target);
+            }
+        }
+
+        private IEnumerator MoveToPTMCraneRoutine(Transform target, float duration)
+        {
+            if (target == null) yield break;
+
+            Vector3 startPos = transform.position;
+            Quaternion startRot = transform.rotation;
+
+            bool isRealChange = Vector3.Distance(startPos, target.position) > 0.05f || Quaternion.Angle(startRot, target.rotation) > 0.5f;
+
+            if (isRealChange)
+            {
+                StartCraneHum();
+            }
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float smoothT = Mathf.SmoothStep(0f, 1f, t);
+
+                transform.position = Vector3.Lerp(startPos, target.position, smoothT);
+                transform.rotation = Quaternion.Slerp(startRot, target.rotation, smoothT);
+                yield return null;
+            }
+
+            transform.position = target.position;
+            transform.rotation = target.rotation;
+            SyncMouseLookAngles();
+
+            StopCraneHum(0.25f);
+            ptmCraneMoveCoroutine = null;
+        }
+
         /// <summary>
         /// Snaps camera directly to the authoritative waypoint for any task index (0 to 9).
         /// Instant snap (0 duration, no lerp/slerp).
@@ -457,7 +620,14 @@ namespace PotLeakage.Camera
                 case 6: SnapCameraToTransform(potMachineLookTarget); break;
                 case 7: SnapCameraToTransform(cbtLookTarget); break;
                 case 8: SnapCameraToTransform(toolsTarget); break;
-                case 9: SnapCameraToTransform(idealPotVoltageTarget); break;
+                case 9:
+                    if (ptmCraneTarget == null)
+                    {
+                        var pt = GameObject.Find("CameraSystem/TransformPoints/PTM Crane") ?? GameObject.Find("TransformPoints/PTM Crane") ?? GameObject.Find("PTM Crane");
+                        if (pt != null) ptmCraneTarget = pt.transform;
+                    }
+                    SnapCameraToTransform(ptmCraneTarget != null ? ptmCraneTarget : idealPotVoltageTarget);
+                    break;
                 default:
                     Debug.LogWarning($"[PotLeakageCameraController] Invalid task index for camera snap: {taskIndex}");
                     break;

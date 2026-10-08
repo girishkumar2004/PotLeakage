@@ -166,6 +166,11 @@ namespace PotLeakage.UI
         public GameObject sideBreakingTool6Target;
         public bool isStopperToolInteractable = false;
         public bool isStopperToolConfirmed = false;
+        [Header("Side Breaking Tool 5 & PIPES Highlight State")]
+        public bool isSideBreakingTool5Interactable = false;
+        public bool isSideBreakingTool5Confirmed = false;
+        public bool isPipesHighlightInteractable = false;
+        public bool hasClickedPipesHighlight = false;
 
         [System.Serializable]
         public struct ToolBlinkSlot
@@ -676,23 +681,70 @@ namespace PotLeakage.UI
         {
             var clip = clickAudioClip != null ? clickAudioClip : nextButtonSFX;
             PlaySFX(clip);
-            // NOTE: Do NOT call CompleteCurrentTask(), TaskCompleted(), NextTask(), or NextSequence() here!
+
+            // NOTE: Do NOT call StopAllVoicesAndInvalidate() or StopSpeech() here!
             // The persistent UnityEvent on UI/Canvas/Welcome Panel/Footer/NextButton
-            // is the authoritative event calling SequenceHelperFunctions.CompleteCurrentTask().
+            // calls SequenceHelperFunctions.CompleteCurrentTask(), which authoritatively
+            // stops the previous voice BEFORE advancing and initiating the new task voice.
+            // Stopping speech here in a dynamic listener fires after the persistent listener
+            // has already started the new voice, which was silencing the new task!
         }
 
         /// <summary>
         /// Speaks the description text using LocalTTS (Manager.Instance.SpeakText).
         /// Strips rich-text tags before speaking and cancels any previous active speech.
         /// </summary>
-        public void SpeakDescriptionText(string text, string key = "")
+        public void SpeakDescriptionText(string text, string key = "", string voiceProfile = "Technical_Mark")
         {
             if (string.IsNullOrEmpty(text)) return;
             string clean = System.Text.RegularExpressions.Regex.Replace(text, "<.*?>", string.Empty).Trim();
+            string keyToUse = !string.IsNullOrEmpty(key) ? key : clean;
             var mgr = TruckTyreReplacement.Core.Manager.Instance;
             if (mgr != null)
             {
-                mgr.SpeakText(clean, clean);
+                mgr.SpeakText(clean, keyToUse, voiceProfile);
+            }
+        }
+
+        public void UpdateStageUI(string description, string status, int taskNum = 10, int totalTasks = 10, string audioKey = null, string voice = "Technical_Mark")
+        {
+            if (descriptionText != null)
+            {
+                descriptionText.gameObject.SetActive(true);
+                descriptionText.text = description;
+            }
+
+            if (statusText != null)
+            {
+                if (!string.IsNullOrEmpty(status))
+                {
+                    statusText.gameObject.SetActive(true);
+                    statusText.text = status;
+                }
+                else
+                {
+                    statusText.gameObject.SetActive(false);
+                }
+            }
+
+            if (progressText != null)
+            {
+                progressText.gameObject.SetActive(true);
+                progressText.text = $"<color=#00E5FF>TASK {taskNum:D2} / {totalTasks:D2}</color>";
+            }
+
+            if (valueDisplay != null)
+            {
+                valueDisplay.SetProgress($"TASK {taskNum:D2} / {totalTasks:D2}");
+                if (!string.IsNullOrEmpty(status))
+                {
+                    valueDisplay.SetStatus(status);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(audioKey))
+            {
+                SpeakDescriptionText(description, audioKey, voice);
             }
         }
 
@@ -969,7 +1021,7 @@ namespace PotLeakage.UI
                     case 6: SetTask07BeamScaleVerificationUI(); break;
                     case 7: SetTask08AnodeDownUI(); break;
                     case 8: SetTask09ToolBoxUI(); break;
-                    case 9: SetTask10NormalPotUI(); break;
+                    case 9: SetTask10PTMCraneUI(); break;
                     default:
                         Debug.LogWarning($"[PotLeakageUIController] Invalid task index: {taskIndex}");
                         break;
@@ -1868,8 +1920,9 @@ namespace PotLeakage.UI
             {
                 descriptionText.gameObject.SetActive(true);
                 descriptionText.text = "Welcome to the Vedanta Pot Leakage Training Visualization.\nThis module covers the Emergency Response Procedure for Side Shell Leakage at Upper Location.";
+                const string welcomeSpeechText = "Welcome to the Vedanta Pot Leakage Training Visualization. This module covers the Emergency Response Procedure for Side Shell Leakage at Upper Location.";
                 Debug.Log("[PotLeakage TTS] Task 01 Welcome requested");
-                SpeakDescriptionText(descriptionText.text, "TASK_01_WELCOME");
+                SpeakDescriptionText(welcomeSpeechText, "TASK_01_WELCOME", "Technical_Mark");
             }
 
             int totalTasks = (SequenceHandler.instance != null && SequenceHandler.instance.sequenceList != null && SequenceHandler.instance.sequenceList.Count > 0 && SequenceHandler.instance.sequenceList[0].TaskList != null)
@@ -1970,7 +2023,7 @@ namespace PotLeakage.UI
             {
                 descriptionText.gameObject.SetActive(true);
                 descriptionText.text = "The reduction pots operate continuously under high temperature and molten bath conditions. Proper monitoring and rapid response to abnormalities are critical to operational safety.";
-                SpeakDescriptionText(descriptionText.text, descriptionText.text);
+                SpeakDescriptionText(descriptionText.text, "TASK_02_NORMAL_POT_OPERATION", "Technical_Mark");
             }
 
             int totalTasks = (SequenceHandler.instance != null && SequenceHandler.instance.sequenceList != null && SequenceHandler.instance.sequenceList.Count > 0 && SequenceHandler.instance.sequenceList[0].TaskList != null)
@@ -2088,7 +2141,12 @@ namespace PotLeakage.UI
 
             if (mgr != null)
             {
-                mgr.SpeakText(speechText, speechText);
+                mgr.SpeakText(speechText, "TASK_03", "Technical_Mark");
+            }
+
+            if (SequenceHelperFunctions.instance != null)
+            {
+                SequenceHelperFunctions.instance.OnTask03Started();
             }
         }
 
@@ -2123,17 +2181,17 @@ namespace PotLeakage.UI
                 nextButton.gameObject.SetActive(true);
             }
 
-            // Ensure flow mesh remains visible at target position with full flow
+            // MoltenMetalFlowMesh must remain DISABLED (authoritative visual is MoltenMetalStreamParticles)
             if (magmaDroolController != null)
             {
                 magmaDroolController.gameObject.SetActive(true);
                 if (magmaDroolController.flowMesh != null)
                 {
-                    magmaDroolController.flowMesh.gameObject.SetActive(true);
+                    magmaDroolController.flowMesh.gameObject.SetActive(false);
                 }
                 if (magmaDroolController.flowMeshRenderer != null)
                 {
-                    magmaDroolController.flowMeshRenderer.enabled = true;
+                    magmaDroolController.flowMeshRenderer.enabled = false;
                 }
             }
 
@@ -3122,12 +3180,28 @@ namespace PotLeakage.UI
             }
         }
 
+        public void OnSideBreakingTool5Clicked()
+        {
+            if (SequenceHelperFunctions.instance != null)
+            {
+                SequenceHelperFunctions.instance.HandleSideBreakingTool5Clicked();
+            }
+        }
+
+        public void OnPipesHighlightClicked()
+        {
+            if (SequenceHelperFunctions.instance != null)
+            {
+                SequenceHelperFunctions.instance.HandlePipesHighlightClicked();
+            }
+        }
+
         /// <summary>
         /// TASK 10 (or 09 in 10-task mode) — Toolbox Selection:
         /// 1. Snap camera to TransformPoints/ToolBoxSelection.
-        /// 2. Highlight gloves inside ToolBox fluorescent green & interactable.
-        /// 3. Trainee clicks gloves -> switches to Side Breaking Tool highlight.
-        /// 4. Trainee clicks Side Breaking Tool -> transitions to Normal Pot stopper application.
+        /// 2. Highlight SIDEREAKING TOOL inside ToolBox fluorescent green & interactable.
+        /// 3. Trainee selects tool -> transitions to Normal Pot stopper application.
+        /// (Glove step removed completely).
         /// </summary>
         public void SetTask10ToolBoxUI()
         {
@@ -3145,12 +3219,12 @@ namespace PotLeakage.UI
             if (statusText != null)
             {
                 statusText.gameObject.SetActive(true);
-                statusText.text = "EQUIP SAFETY GLOVES";
+                statusText.text = "SELECT SIDE BREAKING TOOL";
             }
             if (descriptionText != null)
             {
                 descriptionText.gameObject.SetActive(true);
-                descriptionText.text = SequenceHelperFunctions.GlovesInstructionText;
+                descriptionText.text = SequenceHelperFunctions.SideBreakingToolInstructionText;
             }
             if (nextButton != null)
             {
@@ -3170,13 +3244,22 @@ namespace PotLeakage.UI
             {
                 valueDisplay.SetProgress($"TASK {taskNum:D2} / {totalTasks:D2}");
                 valueDisplay.SetTitle("Toolbox Selection");
-                valueDisplay.DisplayNormalStatus("EQUIP SAFETY GLOVES");
+                valueDisplay.DisplayNormalStatus("SELECT SIDE BREAKING TOOL");
                 valueDisplay.HideValueDisplay();
             }
 
-            SpeakDescriptionText(SequenceHelperFunctions.GlovesInstructionText);
+            var gloves = GameObject.Find("gloves") ?? GameObject.Find("ToolBox/gloves");
+            if (gloves != null) gloves.SetActive(false);
 
-            Debug.Log("[POT LEAKAGE] Toolbox Selection active: gloves equip stage.");
+            isGlovesInteractable = false;
+            isGlovesConfirmed = true;
+            isSideBreakingToolInteractable = true;
+            isSideBreakingToolConfirmed = false;
+
+            StartSideBreakingToolHighlight();
+            SpeakDescriptionText(SequenceHelperFunctions.SideBreakingToolInstructionText);
+
+            Debug.Log("[POT LEAKAGE] Toolbox Selection active: Side Breaking Tool selection stage.");
         }
 
         /// <summary>
@@ -3306,8 +3389,63 @@ namespace PotLeakage.UI
             Debug.Log("[POT LEAKAGE] Return to Normal Pot active: stopper application stage.");
         }
 
+        /// <summary>
+        /// TASK 10 — PTM Crane Preparation:
+        /// Snaps camera to TransformPoints/PTM Crane.
+        /// Description: "The intensity is reduced but not stopped. Let us arrange PTM crane for pot breaking process."
+        /// Spoken with Old Male Voice (Technical_Mark).
+        /// After voice finishes, camera snaps to TransformPoints/Normal Pot.
+        /// </summary>
+        public void SetTask10PTMCraneUI()
+        {
+            InitializeReferences();
+
+            if (SequenceHelperFunctions.instance != null)
+            {
+                SequenceHelperFunctions.instance.BeginPTMCranePreparation();
+                return;
+            }
+
+            if (welcomePanel != null) welcomePanel.SetActive(true);
+            if (titleText != null) titleText.text = "PTM Crane Preparation";
+            if (statusText != null)
+            {
+                statusText.gameObject.SetActive(true);
+                statusText.text = "ARRANGE PTM CRANE";
+            }
+            if (descriptionText != null)
+            {
+                descriptionText.gameObject.SetActive(true);
+                descriptionText.text = SequenceHelperFunctions.PTMCraneDescriptionText;
+            }
+
+            int totalTasks = (SequenceHandler.instance != null && SequenceHandler.instance.sequenceList != null && SequenceHandler.instance.sequenceList.Count > 0 && SequenceHandler.instance.sequenceList[0].TaskList != null)
+                ? SequenceHandler.instance.sequenceList[0].TaskList.Count : 10;
+
+            if (progressText != null)
+            {
+                progressText.text = $"<color=#00E5FF>TASK 10 / {totalTasks:D2}</color>";
+            }
+
+            if (valueDisplay != null)
+            {
+                valueDisplay.SetProgress($"TASK 10 / {totalTasks:D2}");
+                valueDisplay.SetTitle("PTM Crane Preparation");
+                valueDisplay.DisplayNormalStatus("ARRANGE PTM CRANE");
+                valueDisplay.HideValueDisplay();
+            }
+
+            if (nextButton != null)
+            {
+                nextButton.gameObject.SetActive(true);
+            }
+
+            SpeakDescriptionText(SequenceHelperFunctions.PTMCraneDescriptionText, "TASK_10_PTM_CRANE", "Technical_Mark");
+        }
+
         public void SetTask08NormalPotUI() => SetTask11NormalPotUI();
-        public void SetTask10NormalPotUI() => SetTask11NormalPotUI();
+        public void SetTask10NormalPotUI() => SetTask10PTMCraneUI();
+        public void SetTaskPTMCraneUI() => SetTask10PTMCraneUI();
         public void SetTask11UI() => SetTask11NormalPotUI();
 
         public System.Collections.Generic.List<ToolBlinkSlot> CollectSideBreakingToolSlots()

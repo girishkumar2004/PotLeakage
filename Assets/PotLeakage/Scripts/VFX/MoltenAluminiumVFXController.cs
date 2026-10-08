@@ -310,31 +310,38 @@ namespace PotLeakage.VFX
             }
             InitializeTargets();
 
-            // Large mesh tube disabled per specification: replaced by dense liquid particle stream
-            if (flowMesh != null)
-            {
-                flowMesh.gameObject.SetActive(true);
-            }
-
+            // Primary visible leakage is particle-driven (Section A1)
+            // Solid procedural mesh tube renderer is disabled
             if (flowMeshRenderer != null)
             {
                 flowMeshRenderer.enabled = false;
             }
 
-            // Start dense liquid particle stream
+            if (flowMesh != null)
+            {
+                flowMesh.gameObject.SetActive(false);
+            }
+
+            // Continuous overlapping molten blobs forming emergent tongue
             if (streamParticles != null)
             {
                 streamParticles.gameObject.SetActive(true);
                 streamParticles.PlayStream();
             }
 
-            // Start subtle molten smoke rising from the leakage area
+            if (floorSpill != null)
+            {
+                floorSpill.StopSpill();
+                floorSpill.gameObject.SetActive(false);
+            }
+
+            // Subtle molten smoke rising from the leakage area (does not hide molten body)
             if (moltenLeakageSmoke != null)
             {
                 moltenLeakageSmoke.gameObject.SetActive(true);
                 var em = moltenLeakageSmoke.emission;
                 em.enabled = true;
-                em.rateOverTime = 14f;
+                em.rateOverTime = 8f;
                 if (!moltenLeakageSmoke.isPlaying) moltenLeakageSmoke.Play();
             }
 
@@ -418,6 +425,11 @@ namespace PotLeakage.VFX
         /// </summary>
         public void StopMoltenMetalOverflow()
         {
+            if (flowMesh != null)
+            {
+                flowMesh.StopAnimation();
+            }
+
             if (flowMeshRenderer != null)
             {
                 flowMeshRenderer.enabled = false;
@@ -426,6 +438,7 @@ namespace PotLeakage.VFX
             if (streamParticles != null)
             {
                 streamParticles.StopStream();
+                streamParticles.gameObject.SetActive(false);
             }
 
             if (moltenLeakageSmoke != null)
@@ -439,6 +452,7 @@ namespace PotLeakage.VFX
             {
                 moltenMetalDroplets.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                 moltenMetalDroplets.Clear(true);
+                moltenMetalDroplets.gameObject.SetActive(false);
             }
 
             RestoreCube010Material();
@@ -513,6 +527,7 @@ namespace PotLeakage.VFX
 
             if (streamParticles != null)
             {
+                streamParticles.gameObject.SetActive(true);
                 streamParticles.SetControlled(controlled, duration);
             }
 
@@ -521,7 +536,7 @@ namespace PotLeakage.VFX
                 moltenLeakageSmoke.gameObject.SetActive(true);
                 var em = moltenLeakageSmoke.emission;
                 em.enabled = true;
-                em.rateOverTime = controlled ? 22f : 14f; // subtle increase in smoke when stopper is placed
+                em.rateOverTime = controlled ? 12f : 8f; // subtle increase in smoke when stopper is placed
                 if (!moltenLeakageSmoke.isPlaying) moltenLeakageSmoke.Play();
             }
 
@@ -538,6 +553,48 @@ namespace PotLeakage.VFX
             {
                 // Settle floor spill: stops rapid pool expansion, keeping the existing pool visible on the floor
                 floorSpill.SettleSpill();
+                floorSpill.gameObject.SetActive(false);
+            }
+        }
+
+        public void ApplyStopperReduction(float duration = 1.2f)
+        {
+            isControlledLeakage = true;
+            if (flowMeshRenderer != null) flowMeshRenderer.enabled = false;
+            if (streamParticles != null)
+            {
+                streamParticles.gameObject.SetActive(true);
+                streamParticles.ApplyStopperReduction(duration);
+            }
+            else
+            {
+                SetControlledLeakage(true, duration);
+            }
+        }
+
+        public void ApplyPipesReduction(float duration = 2.0f)
+        {
+            isControlledLeakage = true;
+            if (flowMeshRenderer != null) flowMeshRenderer.enabled = false;
+            if (streamParticles != null)
+            {
+                streamParticles.gameObject.SetActive(true);
+                streamParticles.ApplyPipesReduction(duration);
+            }
+            else
+            {
+                SetControlledLeakage(true, duration);
+            }
+        }
+
+        public void ApplyCoolingVoiceFinishedReduction(float duration = 1.5f)
+        {
+            isControlledLeakage = true;
+            if (flowMeshRenderer != null) flowMeshRenderer.enabled = false;
+            if (streamParticles != null)
+            {
+                streamParticles.gameObject.SetActive(true);
+                streamParticles.ApplyCoolingVoiceFinishedReduction(duration);
             }
         }
 

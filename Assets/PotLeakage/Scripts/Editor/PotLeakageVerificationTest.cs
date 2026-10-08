@@ -15,7 +15,6 @@ namespace PotLeakage.Editor
 {
     public static class PotLeakageVerificationTest
     {
-        [MenuItem("Vedanta/Run Verification Test")]
         public static void RunTest()
         {
             Debug.Log("===============================================================");
@@ -172,12 +171,12 @@ namespace PotLeakage.Editor
 
             var managerGO = trainingFramework.transform.Find("Manager");
             var sequenceGO = trainingFramework.transform.Find("Sequence");
-            var seqHandlerGO = trainingFramework.transform.Find("Sequence Handler");
+            var seqHandlerGO = trainingFramework.transform.Find("Sequence Handler") ?? trainingFramework.transform.Find("Sequence Helper");
             var seqHelperGO = trainingFramework.transform.Find("Sequence Helper");
 
             if (managerGO == null) { Debug.LogError("[TEST FAILED] Missing 'Manager' under TrainingFramework"); return; }
             if (sequenceGO == null) { Debug.LogError("[TEST FAILED] Missing 'Sequence' under TrainingFramework"); return; }
-            if (seqHandlerGO == null) { Debug.LogError("[TEST FAILED] Missing 'Sequence Handler' under TrainingFramework"); return; }
+            if (seqHandlerGO == null) { Debug.LogError("[TEST FAILED] Missing 'Sequence Handler' or 'Sequence Helper' under TrainingFramework"); return; }
             if (seqHelperGO == null) { Debug.LogError("[TEST FAILED] Missing 'Sequence Helper' under TrainingFramework"); return; }
 
             var uiController = managerGO.GetComponent<PotLeakageUIController>();

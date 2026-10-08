@@ -72,6 +72,23 @@ namespace PotLeakage.UI
             SetProgress($"TASK 0{stepIndex} / 05");
         }
 
+        public void SetStatus(string status)
+        {
+            if (statusText != null)
+            {
+                if (!string.IsNullOrEmpty(status))
+                {
+                    statusText.gameObject.SetActive(true);
+                    statusText.text = status;
+                }
+                else
+                {
+                    statusText.gameObject.SetActive(false);
+                    statusText.text = "";
+                }
+            }
+        }
+
         public void DisplayNormalStatus()
         {
             DisplayNormalStatus("NORMAL OPERATING CONDITION");
